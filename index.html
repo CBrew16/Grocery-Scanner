@@ -62,7 +62,7 @@ li{background:var(--card);border:1px solid var(--border);border-radius:10px;padd
 // ---- Supabase connection ----
 const SUPABASE_URL = 'https://ayqtssokwkbwswgngsez.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_wVVIxKDS804gtfMUJkhs5w_D-qNn4wl';
-let supabase = null, items = [];
+let sb = null, items = [];
 const $=id=>document.getElementById(id);
 
 function render(){
@@ -83,9 +83,9 @@ function render(){
 
 async function addItem(barcode){
   const entry = { barcode, qty:1, status:'received', received_at:new Date().toISOString() };
-  if(supabase){
+  if(sb){
     try{
-      const { data, error } = await supabase.from('scans').insert(entry).select().single();
+      const { data, error } = await sb.from('scans').insert(entry).select().single();
       if(error) throw error;
       items.push(data);
     }catch(e){
@@ -102,8 +102,8 @@ async function markShelved(id){
   if(!it) return;
   it.status='shelved'; it.shelved_at=new Date().toISOString();
   render();
-  if(supabase && !String(id).startsWith('local-')){
-    try{ await supabase.from('scans').update({status:'shelved', shelved_at: it.shelved_at}).eq('id', id); }catch(e){}
+  if(sb && !String(id).startsWith('local-')){
+    try{ await sb.from('scans').update({status:'shelved', shelved_at: it.shelved_at}).eq('id', id); }catch(e){}
   }
 }
 window.markShelved = markShelved;
@@ -137,18 +137,18 @@ $('scanBtn').onclick = async ()=>{
 
 async function refreshList(){
   try{
-    const { data, error } = await supabase.from('scans').select('*').order('received_at',{ascending:false}).limit(100);
+    const { data, error } = await sb.from('scans').select('*').order('received_at',{ascending:false}).limit(100);
     if(!error){ items = data||[]; render(); }
   }catch(e){}
 }
 
 (async function init(){
   try{
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    const { data, error } = await supabase.from('scans').select('*').order('received_at',{ascending:false}).limit(100);
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const { data, error } = await sb.from('scans').select('*').order('received_at',{ascending:false}).limit(100);
     if(error) throw error;
     items = data || [];
-    supabase
+    sb
       .channel('scans-changes')
       .on('postgres_changes', { event:'*', schema:'public', table:'scans' }, ()=>{ refreshList(); })
       .subscribe();
