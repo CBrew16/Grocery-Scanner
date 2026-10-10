@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Receiving Scan</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
 :root{
@@ -44,7 +45,7 @@ li{background:var(--card);border:1px solid var(--border);border-radius:10px;padd
 <div class="wrap">
   <h1>📦 Receiving Scan</h1>
   <div class="sub">Scan an item as it comes in. Tap "Move to shelf" once it's stocked.</div>
-  <div id="offlineNotice" class="offline" style="display:none">Running locally on this device — not currently saving to the shared log.</div>
+  <div id="offlineNotice" class="offline" style="display:none">Couldn't reach the database — running locally on this device only.</div>
   <div class="stats">
     <div class="stat"><div class="num" id="receivedCount">0</div><div class="label">Received</div></div>
     <div class="stat"><div class="num" id="shelvedCount">0</div><div class="label">Shelved</div></div>
@@ -58,16 +59,19 @@ li{background:var(--card);border:1px solid var(--border);border-radius:10px;padd
   <ul id="list"></ul>
 </div>
 <script>
-let db=null, col=null, items=[];
+// ---- Supabase connection ----
+const SUPABASE_URL = 'https://ayqtssokwkbwswgngsez.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_wVVIxKDS804gtfMUJkhs5w_D-qNn4wl';
+let supabase = null, items = [];
 const $=id=>document.getElementById(id);
 
 function render(){
-  const sorted = [...items].sort((a,b)=> (b.receivedAt||'').localeCompare(a.receivedAt||''));
+  const sorted = [...items].sort((a,b)=> (b.received_at||'').localeCompare(a.received_at||''));
   $('list').innerHTML = sorted.map(it=>`
     <li>
       <div>
         <div class="code">${it.barcode}</div>
-        <div class="meta">${it.qty||1} unit${(it.qty||1)>1?'s':''} · ${new Date(it.receivedAt).toLocaleString()}</div>
+        <div class="meta">${it.qty||1} unit${(it.qty||1)>1?'s':''} · ${new Date(it.received_at).toLocaleString()}</div>
       </div>
       ${it.status==='shelved'
         ? '<span class="tag shelved">Shelved</span>'
@@ -78,11 +82,12 @@ function render(){
 }
 
 async function addItem(barcode){
-  const entry = { barcode, qty:1, status:'received', receivedAt:new Date().toISOString() };
-  if(col){
+  const entry = { barcode, qty:1, status:'received', received_at:new Date().toISOString() };
+  if(supabase){
     try{
-      const ref = await col.add(entry);
-      items.push({...entry, id:ref.id});
+      const { data, error } = await supabase.from('scans').insert(entry).select().single();
+      if(error) throw error;
+      items.push(data);
     }catch(e){
       items.push({...entry, id:'local-'+Date.now()+Math.random()});
     }
@@ -95,10 +100,10 @@ async function addItem(barcode){
 async function markShelved(id){
   const it = items.find(i=>i.id===id);
   if(!it) return;
-  it.status='shelved'; it.shelvedAt=new Date().toISOString();
+  it.status='shelved'; it.shelved_at=new Date().toISOString();
   render();
-  if(col && !String(id).startsWith('local-')){
-    try{ await col.doc(id).update({status:'shelved', shelvedAt: it.shelvedAt}); }catch(e){}
+  if(supabase && !String(id).startsWith('local-')){
+    try{ await supabase.from('scans').update({status:'shelved', shelved_at: it.shelved_at}).eq('id', id); }catch(e){}
   }
 }
 window.markShelved = markShelved;
@@ -130,18 +135,23 @@ $('scanBtn').onclick = async ()=>{
   }
 };
 
+async function refreshList(){
+  try{
+    const { data, error } = await supabase.from('scans').select('*').order('received_at',{ascending:false}).limit(100);
+    if(!error){ items = data||[]; render(); }
+  }catch(e){}
+}
+
 (async function init(){
   try{
-    db = await claude.use('db');
-    if(db){
-      col = db.collection('scans');
-      col.orderBy('receivedAt','desc').limit(100).onSnapshot(snap=>{
-        items = snap.docs.map(d=>({id:d.id, ...d.data()}));
-        render();
-      }, ()=>{ $('offlineNotice').style.display='block'; });
-    } else {
-      $('offlineNotice').style.display='block';
-    }
+    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const { data, error } = await supabase.from('scans').select('*').order('received_at',{ascending:false}).limit(100);
+    if(error) throw error;
+    items = data || [];
+    supabase
+      .channel('scans-changes')
+      .on('postgres_changes', { event:'*', schema:'public', table:'scans' }, ()=>{ refreshList(); })
+      .subscribe();
   }catch(e){
     $('offlineNotice').style.display='block';
   }
