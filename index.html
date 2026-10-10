@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Receiving Scan</title>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{
+  --bg:#fafafa; --fg:#1a1a1a; --card:#fff; --border:#e2e2e2; --accent:#2563eb; --muted:#6b7280;
+  box-sizing:border-box;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#121212; --fg:#f0f0f0; --card:#1e1e1e; --border:#333; --muted:#9ca3af; }
+}
+:root[data-theme="dark"]{ --bg:#121212; --fg:#f0f0f0; --card:#1e1e1e; --border:#333; --muted:#9ca3af; }
+html{scroll-padding-top:env(safe-area-inset-top,0px);}
+body{margin:0; background:var(--bg); color:var(--fg); font-family:-apple-system,system-ui,sans-serif;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);}
+.wrap{max-width:480px;margin:0 auto;padding:16px;}
+h1{font-size:1.25rem;margin:8px 0 4px;}
+.sub{color:var(--muted);font-size:.85rem;margin-bottom:16px;}
+.stats{display:flex;gap:8px;margin-bottom:16px;}
+.stat{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;}
+.stat .num{font-size:1.4rem;font-weight:700;}
+.stat .label{font-size:.7rem;color:var(--muted);}
+button{font:inherit;}
+.scan-btn{width:100%;padding:14px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;font-size:1rem;}
+#reader{width:100%;border-radius:10px;overflow:hidden;margin:12px 0;display:none;}
+.manual{display:flex;gap:8px;margin:12px 0;}
+.manual input{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);min-width:0;}
+.manual button{padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);}
+ul{list-style:none;padding:0;margin:16px 0 0;max-width:100%;overflow-x:auto;}
+li{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+.code{font-family:monospace;font-weight:600;word-break:break-all;}
+.meta{font-size:.72rem;color:var(--muted);}
+.tag{font-size:.7rem;padding:3px 8px;border-radius:999px;border:1px solid var(--border);white-space:nowrap;background:transparent;}
+.tag.received{color:#b45309;border-color:#b45309;}
+.tag.shelved{color:#047857;border-color:#047857;}
+.offline{font-size:.75rem;color:#b91c1c;margin-bottom:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📦 Receiving Scan</h1>
+  <div class="sub">Scan an item as it comes in. Tap "Move to shelf" once it's stocked.</div>
+  <div id="offlineNotice" class="offline" style="display:none">Running locally on this device — not currently saving to the shared log.</div>
+  <div class="stats">
+    <div class="stat"><div class="num" id="receivedCount">0</div><div class="label">Received</div></div>
+    <div class="stat"><div class="num" id="shelvedCount">0</div><div class="label">Shelved</div></div>
+  </div>
+  <button class="scan-btn" id="scanBtn">Start Camera Scan</button>
+  <div id="reader"></div>
+  <div class="manual">
+    <input id="manualInput" placeholder="Or type a barcode" inputmode="numeric">
+    <button id="manualAdd">Add</button>
+  </div>
+  <ul id="list"></ul>
+</div>
+<script>
+let db=null, col=null, items=[];
+const $=id=>document.getElementById(id);
+
+function render(){
+  const sorted = [...items].sort((a,b)=> (b.receivedAt||'').localeCompare(a.receivedAt||''));
+  $('list').innerHTML = sorted.map(it=>`
+    <li>
+      <div>
+        <div class="code">${it.barcode}</div>
+        <div class="meta">${it.qty||1} unit${(it.qty||1)>1?'s':''} · ${new Date(it.receivedAt).toLocaleString()}</div>
+      </div>
+      ${it.status==='shelved'
+        ? '<span class="tag shelved">Shelved</span>'
+        : `<button class="tag received" onclick="markShelved('${it.id}')">Move to shelf</button>`}
+    </li>`).join('');
+  $('receivedCount').textContent = items.filter(i=>i.status==='received').length;
+  $('shelvedCount').textContent = items.filter(i=>i.status==='shelved').length;
+}
+
+async function addItem(barcode){
+  const entry = { barcode, qty:1, status:'received', receivedAt:new Date().toISOString() };
+  if(col){
+    try{
+      const ref = await col.add(entry);
+      items.push({...entry, id:ref.id});
+    }catch(e){
+      items.push({...entry, id:'local-'+Date.now()+Math.random()});
+    }
+  } else {
+    items.push({...entry, id:'local-'+Date.now()+Math.random()});
+  }
+  render();
+}
+
+async function markShelved(id){
+  const it = items.find(i=>i.id===id);
+  if(!it) return;
+  it.status='shelved'; it.shelvedAt=new Date().toISOString();
+  render();
+  if(col && !String(id).startsWith('local-')){
+    try{ await col.doc(id).update({status:'shelved', shelvedAt: it.shelvedAt}); }catch(e){}
+  }
+}
+window.markShelved = markShelved;
+
+$('manualAdd').onclick = ()=>{
+  const v = $('manualInput').value.trim();
+  if(v){ addItem(v); $('manualInput').value=''; }
+};
+$('manualInput').addEventListener('keydown', e=>{ if(e.key==='Enter') $('manualAdd').onclick(); });
+
+let scanner=null, scanning=false;
+$('scanBtn').onclick = async ()=>{
+  if(scanning){
+    if(scanner){ try{ await scanner.stop(); scanner.clear(); }catch(e){} }
+    scanning=false; $('reader').style.display='none'; $('scanBtn').textContent='Start Camera Scan';
+    return;
+  }
+  $('reader').style.display='block'; $('scanBtn').textContent='Stop Camera';
+  scanning=true;
+  scanner = new Html5Qrcode('reader');
+  try{
+    await scanner.start(
+      { facingMode:'environment' },
+      { fps:10, qrbox:{width:260,height:130} },
+      (decodedText)=>{ addItem(decodedText); }
+    );
+  }catch(e){
+    $('reader').innerHTML = '<div style="padding:12px;color:var(--muted);font-size:.85rem;">Camera unavailable — use the text field below instead.</div>';
+  }
+};
+
+(async function init(){
+  try{
+    db = await claude.use('db');
+    if(db){
+      col = db.collection('scans');
+      col.orderBy('receivedAt','desc').limit(100).onSnapshot(snap=>{
+        items = snap.docs.map(d=>({id:d.id, ...d.data()}));
+        render();
+      }, ()=>{ $('offlineNotice').style.display='block'; });
+    } else {
+      $('offlineNotice').style.display='block';
+    }
+  }catch(e){
+    $('offlineNotice').style.display='block';
+  }
+  render();
+})();
+</script>
+</body>
+</html>
