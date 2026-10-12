@@ -36,14 +36,15 @@ button{font:inherit;}
 .manual{display:flex;gap:8px;margin:12px 0;}
 .manual input{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);min-width:0;}
 .manual button{padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);}
+.search{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);margin-bottom:12px;box-sizing:border-box;}
 ul{list-style:none;padding:0;margin:16px 0 0;max-width:100%;overflow-x:auto;}
 li{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;}
 .code{font-family:monospace;font-weight:600;word-break:break-all;}
 .pname{font-weight:600;}
 .meta{font-size:.72rem;color:var(--muted);}
 .tag{font-size:.7rem;padding:3px 8px;border-radius:999px;border:1px solid var(--border);white-space:nowrap;background:transparent;}
-.tag.received{color:#b45309;border-color:#b45309;}
-.tag.shelved{color:#047857;border-color:#047857;}
+.tag.storage{color:#b45309;border-color:#b45309;}
+.tag.shelf{color:#047857;border-color:#047857;}
 .offline{font-size:.75rem;color:#b91c1c;margin-bottom:8px;}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:50;}
 .overlay.active{display:flex;}
@@ -52,7 +53,10 @@ li{background:var(--card);border:1px solid var(--border);border-radius:10px;padd
 .sheet .code{font-size:.8rem;color:var(--muted);margin-bottom:12px;}
 .field{margin-bottom:12px;}
 .field label{display:block;font-size:.75rem;color:var(--muted);margin-bottom:4px;}
-.field input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--fg);}
+.field input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--fg);box-sizing:border-box;}
+.loc-toggle{display:flex;gap:8px;}
+.loc-btn{flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--fg);font-weight:600;font-size:.85rem;}
+.loc-btn.selected{border-color:var(--accent);background:var(--accent);color:#fff;}
 .sheet-btns{display:flex;gap:8px;margin-top:4px;}
 .sheet-btns button{flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);font-weight:600;}
 .btn-confirm{background:var(--accent);color:#fff;border-color:var(--accent);}
@@ -77,10 +81,10 @@ th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;
   <div id="offlineNotice" class="offline" style="display:none">Couldn't reach the database — running locally on this device only.</div>
 
   <div class="view active" id="view-scan">
-    <div class="sub">Scan an item as it comes in. Tap "Move to shelf" once it's stocked.</div>
+    <div class="sub">Scan an item, then say whether it's in storage or already on the shelf.</div>
     <div class="stats">
-      <div class="stat"><div class="num" id="receivedCount">0</div><div class="label">Received</div></div>
-      <div class="stat"><div class="num" id="shelvedCount">0</div><div class="label">Shelved</div></div>
+      <div class="stat"><div class="num" id="backCount">0</div><div class="label">In storage</div></div>
+      <div class="stat"><div class="num" id="frontCount">0</div><div class="label">On shelf</div></div>
     </div>
     <button class="scan-btn" id="scanBtn">Start Camera Scan</button>
     <div id="reader"></div>
@@ -97,8 +101,9 @@ th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;
   </div>
 
   <div class="view" id="view-report">
-    <div class="sub">Received vs. shelved, by product.</div>
-    <table><thead><tr><th>Product</th><th>Recv</th><th>Shelf</th><th>Gap</th></tr></thead><tbody id="reportBody"></tbody></table>
+    <div class="sub">Back vs. front quantity, by product.</div>
+    <input id="reportSearch" class="search" placeholder="Search a product or barcode...">
+    <table><thead><tr><th>Product</th><th>Back</th><th>Front</th><th>Total</th></tr></thead><tbody id="reportBody"></tbody></table>
   </div>
 </div>
 
@@ -109,6 +114,13 @@ th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;
     <div class="code" id="sheetBarcode"></div>
     <div class="field"><label>Product name</label><input id="sheetName" placeholder="e.g. 2% Milk 1L"></div>
     <div class="field"><label>Quantity</label><input id="sheetQty" type="number" value="1" min="1"></div>
+    <div class="field">
+      <label>Where is it?</label>
+      <div class="loc-toggle">
+        <button class="loc-btn selected" id="locStorage" type="button">In storage</button>
+        <button class="loc-btn" id="locShelf" type="button">On shelf</button>
+      </div>
+    </div>
     <div class="sheet-btns">
       <button class="btn-cancel" id="sheetCancel">Cancel</button>
       <button class="btn-confirm" id="sheetConfirm">Confirm</button>
@@ -119,8 +131,13 @@ th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;
 <script>
 const SUPABASE_URL = 'https://ayqtssokwkbwswgngsez.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5cXRzc29rd2tid3N3Z25nc2V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1OTA5MTMsImV4cCI6MjEwNzE2NjkxM30.SEAm_MwXlLOitkeNB71uuRrYiDdV3YtcruoYX8_WeKo';
-let sb = null, items = [], products = [], pendingBarcode = null, pendingIsNew = false;
+let sb = null, items = [], products = [], pendingBarcode = null, pendingIsNew = false, pendingLocation = 'storage', reportFilter = '';
 const $=id=>document.getElementById(id);
+
+function normLoc(status){
+  // backward-compatible with older 'received'/'shelved' test rows
+  return (status === 'shelf' || status === 'shelved') ? 'shelf' : 'storage';
+}
 
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.onclick=()=>{
@@ -134,18 +151,21 @@ document.querySelectorAll('.tab').forEach(tab=>{
 
 function render(){
   const sorted = [...items].sort((a,b)=> (b.received_at||'').localeCompare(a.received_at||''));
-  $('list').innerHTML = sorted.map(it=>`
+  $('list').innerHTML = sorted.map(it=>{
+    const loc = normLoc(it.status);
+    const other = loc==='storage' ? 'shelf' : 'storage';
+    const otherLabel = loc==='storage' ? 'Move to shelf' : 'Move to storage';
+    return `
     <li>
       <div>
         <div class="pname">${it.name || it.barcode}</div>
         <div class="meta">${it.qty||1} unit${(it.qty||1)>1?'s':''} · ${new Date(it.received_at).toLocaleString()}</div>
       </div>
-      ${it.status==='shelved'
-        ? '<span class="tag shelved">Shelved</span>'
-        : `<button class="tag received" onclick="markShelved('${it.id}')">Move to shelf</button>`}
-    </li>`).join('');
-  $('receivedCount').textContent = items.filter(i=>i.status==='received').length;
-  $('shelvedCount').textContent = items.filter(i=>i.status==='shelved').length;
+      <button class="tag ${loc}" onclick="toggleLocation('${it.id}')">${loc==='storage'?'Storage':'Shelf'} · ${otherLabel}</button>
+    </li>`;
+  }).join('');
+  $('backCount').textContent = items.filter(i=>normLoc(i.status)==='storage').reduce((s,i)=>s+(i.qty||1),0);
+  $('frontCount').textContent = items.filter(i=>normLoc(i.status)==='shelf').reduce((s,i)=>s+(i.qty||1),0);
 
   $('catalogueBody').innerHTML = products.map(p=>`<tr><td class="code">${p.barcode}</td><td>${p.name}</td></tr>`).join('')
     || '<tr><td colspan="2" style="color:var(--muted)">No products matched yet</td></tr>';
@@ -154,16 +174,23 @@ function render(){
 function renderReport(){
   const byProduct = {};
   items.forEach(it=>{
-    const key = it.name || it.barcode;
-    if(!byProduct[key]) byProduct[key] = {recv:0, shelf:0};
-    byProduct[key].recv += it.qty||1;
-    if(it.status==='shelved') byProduct[key].shelf += it.qty||1;
+    const key = it.barcode;
+    if(!byProduct[key]) byProduct[key] = {name: it.name || it.barcode, barcode: it.barcode, back:0, front:0};
+    const loc = normLoc(it.status);
+    if(loc==='storage') byProduct[key].back += (it.qty||1);
+    else byProduct[key].front += (it.qty||1);
   });
-  $('reportBody').innerHTML = Object.entries(byProduct).map(([name,v])=>{
-    const gap = v.recv - v.shelf;
-    return `<tr><td>${name}</td><td>${v.recv}</td><td>${v.shelf}</td><td class="gap ${gap===0?'zero':'pos'}">${gap}</td></tr>`;
-  }).join('') || '<tr><td colspan="4" style="color:var(--muted)">No scans yet</td></tr>';
+  const filter = reportFilter.trim().toLowerCase();
+  const rows = Object.values(byProduct).filter(r =>
+    !filter || r.name.toLowerCase().includes(filter) || r.barcode.includes(filter)
+  );
+  $('reportBody').innerHTML = rows.map(r=>{
+    const total = r.back + r.front;
+    return `<tr><td>${r.name}</td><td>${r.back}</td><td>${r.front}</td><td class="gap">${total}</td></tr>`;
+  }).join('') || `<tr><td colspan="4" style="color:var(--muted)">${filter ? 'No matches' : 'No scans yet'}</td></tr>`;
 }
+
+$('reportSearch').addEventListener('input', e=>{ reportFilter = e.target.value; renderReport(); });
 
 // ---- Lookup + confirm flow ----
 async function prepareScan(barcode){
@@ -176,6 +203,9 @@ async function prepareScan(barcode){
   }
   pendingBarcode = barcode;
   pendingIsNew = !product;
+  pendingLocation = 'storage';
+  $('locStorage').classList.add('selected');
+  $('locShelf').classList.remove('selected');
   $('newTag').style.display = pendingIsNew ? 'block' : 'none';
   $('sheetBarcode').textContent = barcode;
   $('sheetName').value = product ? product.name : '';
@@ -183,6 +213,9 @@ async function prepareScan(barcode){
   $('overlay').classList.add('active');
   $('sheetName').focus();
 }
+
+$('locStorage').onclick = ()=>{ pendingLocation='storage'; $('locStorage').classList.add('selected'); $('locShelf').classList.remove('selected'); };
+$('locShelf').onclick = ()=>{ pendingLocation='shelf'; $('locShelf').classList.add('selected'); $('locStorage').classList.remove('selected'); };
 
 $('sheetCancel').onclick = ()=>{ $('overlay').classList.remove('active'); };
 $('sheetConfirm').onclick = async ()=>{
@@ -200,11 +233,11 @@ $('sheetConfirm').onclick = async ()=>{
     products.push({ barcode: pendingBarcode, name });
   }
 
-  await addItem(pendingBarcode, name, qty);
+  await addItem(pendingBarcode, name, qty, pendingLocation);
 };
 
-async function addItem(barcode, name, qty){
-  const entry = { barcode, name, qty, status:'received', received_at:new Date().toISOString() };
+async function addItem(barcode, name, qty, location){
+  const entry = { barcode, name, qty, status: location, received_at:new Date().toISOString() };
   if(sb){
     try{
       const { data, error } = await sb.from('scans').insert(entry).select().single();
@@ -219,16 +252,18 @@ async function addItem(barcode, name, qty){
   render();
 }
 
-async function markShelved(id){
+async function toggleLocation(id){
   const it = items.find(i=>i.id===id);
   if(!it) return;
-  it.status='shelved'; it.shelved_at=new Date().toISOString();
+  const current = normLoc(it.status);
+  const next = current==='storage' ? 'shelf' : 'storage';
+  it.status = next; it.shelved_at = new Date().toISOString();
   render();
   if(sb && !String(id).startsWith('local-')){
-    try{ await sb.from('scans').update({status:'shelved', shelved_at: it.shelved_at}).eq('id', id); }catch(e){}
+    try{ await sb.from('scans').update({status: next, shelved_at: it.shelved_at}).eq('id', id); }catch(e){}
   }
 }
-window.markShelved = markShelved;
+window.toggleLocation = toggleLocation;
 
 $('manualAdd').onclick = ()=>{
   const v = $('manualInput').value.trim();
@@ -259,7 +294,7 @@ $('scanBtn').onclick = async ()=>{
 
 async function refreshList(){
   try{
-    const { data, error } = await sb.from('scans').select('*').order('received_at',{ascending:false}).limit(100);
+    const { data, error } = await sb.from('scans').select('*').order('received_at',{ascending:false}).limit(200);
     if(!error){ items = data||[]; render(); }
   }catch(e){}
 }
@@ -268,7 +303,7 @@ async function refreshList(){
   try{
     sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     const [scansRes, productsRes] = await Promise.all([
-      sb.from('scans').select('*').order('received_at',{ascending:false}).limit(100),
+      sb.from('scans').select('*').order('received_at',{ascending:false}).limit(200),
       sb.from('products').select('*')
     ]);
     if(scansRes.error) throw scansRes.error;
