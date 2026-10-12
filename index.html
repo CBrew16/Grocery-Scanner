@@ -21,6 +21,11 @@ body{margin:0; background:var(--bg); color:var(--fg); font-family:-apple-system,
 .wrap{max-width:480px;margin:0 auto;padding:16px;}
 h1{font-size:1.25rem;margin:8px 0 4px;}
 .sub{color:var(--muted);font-size:.85rem;margin-bottom:16px;}
+.tabs{display:flex;gap:6px;margin-bottom:16px;}
+.tab{flex:1;padding:8px;text-align:center;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:.85rem;}
+.tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.view{display:none;}
+.view.active{display:block;}
 .stats{display:flex;gap:8px;margin-bottom:16px;}
 .stat{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;}
 .stat .num{font-size:1.4rem;font-weight:700;}
@@ -34,43 +39,105 @@ button{font:inherit;}
 ul{list-style:none;padding:0;margin:16px 0 0;max-width:100%;overflow-x:auto;}
 li{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;}
 .code{font-family:monospace;font-weight:600;word-break:break-all;}
+.pname{font-weight:600;}
 .meta{font-size:.72rem;color:var(--muted);}
 .tag{font-size:.7rem;padding:3px 8px;border-radius:999px;border:1px solid var(--border);white-space:nowrap;background:transparent;}
 .tag.received{color:#b45309;border-color:#b45309;}
 .tag.shelved{color:#047857;border-color:#047857;}
 .offline{font-size:.75rem;color:#b91c1c;margin-bottom:8px;}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:50;}
+.overlay.active{display:flex;}
+.sheet{background:var(--card);width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));}
+.sheet h3{margin:0 0 4px;font-size:1.05rem;}
+.sheet .code{font-size:.8rem;color:var(--muted);margin-bottom:12px;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:.75rem;color:var(--muted);margin-bottom:4px;}
+.field input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--fg);}
+.sheet-btns{display:flex;gap:8px;margin-top:4px;}
+.sheet-btns button{flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);font-weight:600;}
+.btn-confirm{background:var(--accent);color:#fff;border-color:var(--accent);}
+.btn-cancel{background:transparent;color:var(--fg);}
+.newtag{font-size:.7rem;color:var(--accent);margin-bottom:8px;}
+table{width:100%;border-collapse:collapse;font-size:.85rem;}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--border);}
+th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;}
+.gap{font-weight:700;}
+.gap.zero{color:var(--muted);}
+.gap.pos{color:#b91c1c;}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>📦 Receiving Scan</h1>
-  <div class="sub">Scan an item as it comes in. Tap "Move to shelf" once it's stocked.</div>
+  <h1>📦 Store Scan</h1>
+  <div class="tabs">
+    <div class="tab active" data-view="scan">Scan</div>
+    <div class="tab" data-view="catalogue">Catalogue</div>
+    <div class="tab" data-view="report">Report</div>
+  </div>
   <div id="offlineNotice" class="offline" style="display:none">Couldn't reach the database — running locally on this device only.</div>
-  <div class="stats">
-    <div class="stat"><div class="num" id="receivedCount">0</div><div class="label">Received</div></div>
-    <div class="stat"><div class="num" id="shelvedCount">0</div><div class="label">Shelved</div></div>
+
+  <div class="view active" id="view-scan">
+    <div class="sub">Scan an item as it comes in. Tap "Move to shelf" once it's stocked.</div>
+    <div class="stats">
+      <div class="stat"><div class="num" id="receivedCount">0</div><div class="label">Received</div></div>
+      <div class="stat"><div class="num" id="shelvedCount">0</div><div class="label">Shelved</div></div>
+    </div>
+    <button class="scan-btn" id="scanBtn">Start Camera Scan</button>
+    <div id="reader"></div>
+    <div class="manual">
+      <input id="manualInput" placeholder="Or type a barcode" inputmode="numeric">
+      <button id="manualAdd">Add</button>
+    </div>
+    <ul id="list"></ul>
   </div>
-  <button class="scan-btn" id="scanBtn">Start Camera Scan</button>
-  <div id="reader"></div>
-  <div class="manual">
-    <input id="manualInput" placeholder="Or type a barcode" inputmode="numeric">
-    <button id="manualAdd">Add</button>
+
+  <div class="view" id="view-catalogue">
+    <div class="sub">Products your scans have matched so far.</div>
+    <table><thead><tr><th>Barcode</th><th>Name</th></tr></thead><tbody id="catalogueBody"></tbody></table>
   </div>
-  <ul id="list"></ul>
+
+  <div class="view" id="view-report">
+    <div class="sub">Received vs. shelved, by product.</div>
+    <table><thead><tr><th>Product</th><th>Recv</th><th>Shelf</th><th>Gap</th></tr></thead><tbody id="reportBody"></tbody></table>
+  </div>
 </div>
+
+<div class="overlay" id="overlay">
+  <div class="sheet">
+    <div class="newtag" id="newTag" style="display:none">New product — not in your catalogue yet</div>
+    <h3>Confirm item</h3>
+    <div class="code" id="sheetBarcode"></div>
+    <div class="field"><label>Product name</label><input id="sheetName" placeholder="e.g. 2% Milk 1L"></div>
+    <div class="field"><label>Quantity</label><input id="sheetQty" type="number" value="1" min="1"></div>
+    <div class="sheet-btns">
+      <button class="btn-cancel" id="sheetCancel">Cancel</button>
+      <button class="btn-confirm" id="sheetConfirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <script>
-// ---- Supabase connection ----
 const SUPABASE_URL = 'https://ayqtssokwkbwswgngsez.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_wVVIxKDS804gtfMUJkhs5w_D-qNn4wl';
-let sb = null, items = [];
+let sb = null, items = [], products = [], pendingBarcode = null, pendingIsNew = false;
 const $=id=>document.getElementById(id);
+
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.onclick=()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    tab.classList.add('active');
+    $('view-'+tab.dataset.view).classList.add('active');
+    if(tab.dataset.view==='report') renderReport();
+  };
+});
 
 function render(){
   const sorted = [...items].sort((a,b)=> (b.received_at||'').localeCompare(a.received_at||''));
   $('list').innerHTML = sorted.map(it=>`
     <li>
       <div>
-        <div class="code">${it.barcode}</div>
+        <div class="pname">${it.name || it.barcode}</div>
         <div class="meta">${it.qty||1} unit${(it.qty||1)>1?'s':''} · ${new Date(it.received_at).toLocaleString()}</div>
       </div>
       ${it.status==='shelved'
@@ -79,10 +146,65 @@ function render(){
     </li>`).join('');
   $('receivedCount').textContent = items.filter(i=>i.status==='received').length;
   $('shelvedCount').textContent = items.filter(i=>i.status==='shelved').length;
+
+  $('catalogueBody').innerHTML = products.map(p=>`<tr><td class="code">${p.barcode}</td><td>${p.name}</td></tr>`).join('')
+    || '<tr><td colspan="2" style="color:var(--muted)">No products matched yet</td></tr>';
 }
 
-async function addItem(barcode){
-  const entry = { barcode, qty:1, status:'received', received_at:new Date().toISOString() };
+function renderReport(){
+  const byProduct = {};
+  items.forEach(it=>{
+    const key = it.name || it.barcode;
+    if(!byProduct[key]) byProduct[key] = {recv:0, shelf:0};
+    byProduct[key].recv += it.qty||1;
+    if(it.status==='shelved') byProduct[key].shelf += it.qty||1;
+  });
+  $('reportBody').innerHTML = Object.entries(byProduct).map(([name,v])=>{
+    const gap = v.recv - v.shelf;
+    return `<tr><td>${name}</td><td>${v.recv}</td><td>${v.shelf}</td><td class="gap ${gap===0?'zero':'pos'}">${gap}</td></tr>`;
+  }).join('') || '<tr><td colspan="4" style="color:var(--muted)">No scans yet</td></tr>';
+}
+
+// ---- Lookup + confirm flow ----
+async function prepareScan(barcode){
+  let product = products.find(p=>p.barcode===barcode);
+  if(!product && sb){
+    try{
+      const { data } = await sb.from('products').select('*').eq('barcode', barcode).maybeSingle();
+      if(data) product = data;
+    }catch(e){}
+  }
+  pendingBarcode = barcode;
+  pendingIsNew = !product;
+  $('newTag').style.display = pendingIsNew ? 'block' : 'none';
+  $('sheetBarcode').textContent = barcode;
+  $('sheetName').value = product ? product.name : '';
+  $('sheetQty').value = 1;
+  $('overlay').classList.add('active');
+  $('sheetName').focus();
+}
+
+$('sheetCancel').onclick = ()=>{ $('overlay').classList.remove('active'); };
+$('sheetConfirm').onclick = async ()=>{
+  const name = $('sheetName').value.trim();
+  const qty = parseInt($('sheetQty').value) || 1;
+  if(!name){ $('sheetName').focus(); return; }
+  $('overlay').classList.remove('active');
+
+  if(pendingIsNew && sb){
+    try{
+      await sb.from('products').insert({ barcode: pendingBarcode, name });
+      products.push({ barcode: pendingBarcode, name });
+    }catch(e){}
+  } else if(pendingIsNew){
+    products.push({ barcode: pendingBarcode, name });
+  }
+
+  await addItem(pendingBarcode, name, qty);
+};
+
+async function addItem(barcode, name, qty){
+  const entry = { barcode, name, qty, status:'received', received_at:new Date().toISOString() };
   if(sb){
     try{
       const { data, error } = await sb.from('scans').insert(entry).select().single();
@@ -110,7 +232,7 @@ window.markShelved = markShelved;
 
 $('manualAdd').onclick = ()=>{
   const v = $('manualInput').value.trim();
-  if(v){ addItem(v); $('manualInput').value=''; }
+  if(v){ prepareScan(v); $('manualInput').value=''; }
 };
 $('manualInput').addEventListener('keydown', e=>{ if(e.key==='Enter') $('manualAdd').onclick(); });
 
@@ -128,7 +250,7 @@ $('scanBtn').onclick = async ()=>{
     await scanner.start(
       { facingMode:'environment' },
       { fps:10, qrbox:{width:260,height:130} },
-      (decodedText)=>{ addItem(decodedText); }
+      (decodedText)=>{ if(!$('overlay').classList.contains('active')) prepareScan(decodedText); }
     );
   }catch(e){
     $('reader').innerHTML = '<div style="padding:12px;color:var(--muted);font-size:.85rem;">Camera unavailable — use the text field below instead.</div>';
@@ -145,9 +267,13 @@ async function refreshList(){
 (async function init(){
   try{
     sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    const { data, error } = await sb.from('scans').select('*').order('received_at',{ascending:false}).limit(100);
-    if(error) throw error;
-    items = data || [];
+    const [scansRes, productsRes] = await Promise.all([
+      sb.from('scans').select('*').order('received_at',{ascending:false}).limit(100),
+      sb.from('products').select('*')
+    ]);
+    if(scansRes.error) throw scansRes.error;
+    items = scansRes.data || [];
+    products = productsRes.data || [];
     sb
       .channel('scans-changes')
       .on('postgres_changes', { event:'*', schema:'public', table:'scans' }, ()=>{ refreshList(); })
