@@ -8,7 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
 :root{
-  --bg:#fafafa; --fg:#1a1a1a; --card:#fff; --border:#e2e2e2; --accent:#2563eb; --muted:#6b7280;
+  --bg:#fafafa; --fg:#1a1a1a; --card:#fff; --border:#e2e2e2; --accent:#2563eb; --muted:#6b7280; --green:#047857;
   box-sizing:border-box;
 }
 @media (prefers-color-scheme: dark){
@@ -31,6 +31,10 @@ h1{font-size:1.25rem;margin:8px 0 4px;}
 .stat .num{font-size:1.4rem;font-weight:700;}
 .stat .label{font-size:.7rem;color:var(--muted);}
 button{font:inherit;}
+.mode-toggle{display:flex;gap:8px;margin-bottom:12px;}
+.mode-btn{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--fg);font-weight:600;font-size:.85rem;}
+.mode-btn.selected.receiving{background:var(--accent);color:#fff;border-color:var(--accent);}
+.mode-btn.selected.moving{background:var(--green);color:#fff;border-color:var(--green);}
 .scan-btn{width:100%;padding:14px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;font-size:1rem;}
 #reader{width:100%;border-radius:10px;overflow:hidden;margin:12px 0;display:none;}
 .manual{display:flex;gap:8px;margin:12px 0;}
@@ -39,12 +43,12 @@ button{font:inherit;}
 .search{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);margin-bottom:12px;box-sizing:border-box;}
 ul{list-style:none;padding:0;margin:16px 0 0;max-width:100%;overflow-x:auto;}
 li{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;}
-.code{font-family:monospace;font-weight:600;word-break:break-all;}
 .pname{font-weight:600;}
 .meta{font-size:.72rem;color:var(--muted);}
-.tag{font-size:.7rem;padding:3px 8px;border-radius:999px;border:1px solid var(--border);white-space:nowrap;background:transparent;}
-.tag.storage{color:#b45309;border-color:#b45309;}
-.tag.shelf{color:#047857;border-color:#047857;}
+.tag{font-size:.7rem;padding:3px 8px;border-radius:999px;border:1px solid var(--border);white-space:nowrap;}
+.tag.in{color:#b45309;border-color:#b45309;}
+.tag.move{color:#047857;border-color:#047857;}
+.del{background:transparent;border:none;color:var(--muted);font-size:1rem;padding:4px 6px;cursor:pointer;}
 .offline{font-size:.75rem;color:#b91c1c;margin-bottom:8px;}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:50;}
 .overlay.active{display:flex;}
@@ -54,9 +58,6 @@ li{background:var(--card);border:1px solid var(--border);border-radius:10px;padd
 .field{margin-bottom:12px;}
 .field label{display:block;font-size:.75rem;color:var(--muted);margin-bottom:4px;}
 .field input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--fg);box-sizing:border-box;}
-.loc-toggle{display:flex;gap:8px;}
-.loc-btn{flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--fg);font-weight:600;font-size:.85rem;}
-.loc-btn.selected{border-color:var(--accent);background:var(--accent);color:#fff;}
 .sheet-btns{display:flex;gap:8px;margin-top:4px;}
 .sheet-btns button{flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);font-weight:600;}
 .btn-confirm{background:var(--accent);color:#fff;border-color:var(--accent);}
@@ -65,9 +66,6 @@ li{background:var(--card);border:1px solid var(--border);border-radius:10px;padd
 table{width:100%;border-collapse:collapse;font-size:.85rem;}
 th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--border);}
 th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;}
-.gap{font-weight:700;}
-.gap.zero{color:var(--muted);}
-.gap.pos{color:#b91c1c;}
 </style>
 </head>
 <body>
@@ -81,11 +79,15 @@ th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;
   <div id="offlineNotice" class="offline" style="display:none">Couldn't reach the database — running locally on this device only.</div>
 
   <div class="view active" id="view-scan">
-    <div class="sub">Scan an item, then say whether it's in storage or already on the shelf.</div>
     <div class="stats">
       <div class="stat"><div class="num" id="backCount">0</div><div class="label">In storage</div></div>
       <div class="stat"><div class="num" id="frontCount">0</div><div class="label">On shelf</div></div>
     </div>
+    <div class="mode-toggle">
+      <button class="mode-btn selected receiving" id="modeReceiving" type="button">Receiving</button>
+      <button class="mode-btn moving" id="modeMoving" type="button">Moving to shelf</button>
+    </div>
+    <div class="sub" id="modeHint">Scan each item as it arrives from the wholesaler.</div>
     <button class="scan-btn" id="scanBtn">Start Camera Scan</button>
     <div id="reader"></div>
     <div class="manual">
@@ -110,17 +112,10 @@ th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;
 <div class="overlay" id="overlay">
   <div class="sheet">
     <div class="newtag" id="newTag" style="display:none">New product — not in your catalogue yet</div>
-    <h3>Confirm item</h3>
+    <h3 id="sheetTitle">Confirm item</h3>
     <div class="code" id="sheetBarcode"></div>
-    <div class="field"><label>Product name</label><input id="sheetName" placeholder="e.g. 2% Milk 1L"></div>
-    <div class="field"><label>Quantity</label><input id="sheetQty" type="number" value="1" min="1"></div>
-    <div class="field">
-      <label>Where is it?</label>
-      <div class="loc-toggle">
-        <button class="loc-btn selected" id="locStorage" type="button">In storage</button>
-        <button class="loc-btn" id="locShelf" type="button">On shelf</button>
-      </div>
-    </div>
+    <div class="field" id="nameField"><label>Product name</label><input id="sheetName" placeholder="e.g. 2% Milk 1L"></div>
+    <div class="field"><label id="qtyLabel">Quantity</label><input id="sheetQty" type="number" value="1" min="1"></div>
     <div class="sheet-btns">
       <button class="btn-cancel" id="sheetCancel">Cancel</button>
       <button class="btn-confirm" id="sheetConfirm">Confirm</button>
@@ -131,13 +126,19 @@ th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;
 <script>
 const SUPABASE_URL = 'https://ayqtssokwkbwswgngsez.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5cXRzc29rd2tid3N3Z25nc2V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1OTA5MTMsImV4cCI6MjEwNzE2NjkxM30.SEAm_MwXlLOitkeNB71uuRrYiDdV3YtcruoYX8_WeKo';
-let sb = null, items = [], products = [], pendingBarcode = null, pendingIsNew = false, pendingLocation = 'storage', reportFilter = '';
+let sb = null, events = [], products = [], mode = 'receiving', pendingBarcode = null, pendingIsNew = false, reportFilter = '';
 const $=id=>document.getElementById(id);
 
-function normLoc(status){
-  // backward-compatible with older 'received'/'shelved' test rows
-  return (status === 'shelf' || status === 'shelved') ? 'shelf' : 'storage';
-}
+$('modeReceiving').onclick = ()=>{
+  mode='receiving';
+  $('modeReceiving').classList.add('selected'); $('modeMoving').classList.remove('selected');
+  $('modeHint').textContent = 'Scan each item as it arrives from the wholesaler.';
+};
+$('modeMoving').onclick = ()=>{
+  mode='moving';
+  $('modeMoving').classList.add('selected'); $('modeReceiving').classList.remove('selected');
+  $('modeHint').textContent = 'Scan each unit as you carry it to the shelf. Known products log instantly.';
+};
 
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.onclick=()=>{
@@ -150,50 +151,54 @@ document.querySelectorAll('.tab').forEach(tab=>{
 });
 
 function render(){
-  const sorted = [...items].sort((a,b)=> (b.received_at||'').localeCompare(a.received_at||''));
-  $('list').innerHTML = sorted.map(it=>{
-    const loc = normLoc(it.status);
-    const other = loc==='storage' ? 'shelf' : 'storage';
-    const otherLabel = loc==='storage' ? 'Move to shelf' : 'Move to storage';
-    return `
+  const sorted = [...events].sort((a,b)=> (b.received_at||'').localeCompare(a.received_at||''));
+  $('list').innerHTML = sorted.slice(0,100).map(ev=>`
     <li>
       <div>
-        <div class="pname">${it.name || it.barcode}</div>
-        <div class="meta">${it.qty||1} unit${(it.qty||1)>1?'s':''} · ${new Date(it.received_at).toLocaleString()}</div>
+        <div class="pname">${ev.name || ev.barcode}</div>
+        <div class="meta">${ev.qty||1} unit${(ev.qty||1)>1?'s':''} · ${new Date(ev.received_at).toLocaleString()}</div>
       </div>
-      <button class="tag ${loc}" onclick="toggleLocation('${it.id}')">${loc==='storage'?'Storage':'Shelf'} · ${otherLabel}</button>
-    </li>`;
-  }).join('');
-  $('backCount').textContent = items.filter(i=>normLoc(i.status)==='storage').reduce((s,i)=>s+(i.qty||1),0);
-  $('frontCount').textContent = items.filter(i=>normLoc(i.status)==='shelf').reduce((s,i)=>s+(i.qty||1),0);
+      <span class="tag ${ev.status}">${ev.status==='in'?'Received':'Moved'}</span>
+      <button class="del" title="Delete" onclick="deleteEvent('${ev.id}')">&times;</button>
+    </li>`).join('');
 
-  $('catalogueBody').innerHTML = products.map(p=>`<tr><td class="code">${p.barcode}</td><td>${p.name}</td></tr>`).join('')
+  const totals = computeTotals();
+  let back=0, front=0;
+  Object.values(totals).forEach(t=>{ back += Math.max(t.back,0); front += t.front; });
+  $('backCount').textContent = back;
+  $('frontCount').textContent = front;
+
+  $('catalogueBody').innerHTML = products.map(p=>`<tr><td style="font-family:monospace">${p.barcode}</td><td>${p.name}</td></tr>`).join('')
     || '<tr><td colspan="2" style="color:var(--muted)">No products matched yet</td></tr>';
 }
 
-function renderReport(){
-  const byProduct = {};
-  items.forEach(it=>{
-    const key = it.barcode;
-    if(!byProduct[key]) byProduct[key] = {name: it.name || it.barcode, barcode: it.barcode, back:0, front:0};
-    const loc = normLoc(it.status);
-    if(loc==='storage') byProduct[key].back += (it.qty||1);
-    else byProduct[key].front += (it.qty||1);
+function computeTotals(){
+  const byBarcode = {};
+  events.forEach(ev=>{
+    const key = ev.barcode;
+    if(!byBarcode[key]) byBarcode[key] = {name: ev.name || ev.barcode, barcode: ev.barcode, back:0, front:0};
+    if(ev.status==='in') byBarcode[key].back += (ev.qty||1);
+    else { byBarcode[key].back -= (ev.qty||1); byBarcode[key].front += (ev.qty||1); }
   });
+  return byBarcode;
+}
+
+function renderReport(){
+  const totals = computeTotals();
   const filter = reportFilter.trim().toLowerCase();
-  const rows = Object.values(byProduct).filter(r =>
+  const rows = Object.values(totals).filter(r =>
     !filter || r.name.toLowerCase().includes(filter) || r.barcode.includes(filter)
   );
   $('reportBody').innerHTML = rows.map(r=>{
-    const total = r.back + r.front;
-    return `<tr><td>${r.name}</td><td>${r.back}</td><td>${r.front}</td><td class="gap">${total}</td></tr>`;
+    const back = Math.max(r.back,0);
+    const total = back + r.front;
+    return `<tr><td>${r.name}</td><td>${back}</td><td>${r.front}</td><td>${total}</td></tr>`;
   }).join('') || `<tr><td colspan="4" style="color:var(--muted)">${filter ? 'No matches' : 'No scans yet'}</td></tr>`;
 }
 
 $('reportSearch').addEventListener('input', e=>{ reportFilter = e.target.value; renderReport(); });
 
-// ---- Lookup + confirm flow ----
-async function prepareScan(barcode){
+async function lookupProduct(barcode){
   let product = products.find(p=>p.barcode===barcode);
   if(!product && sb){
     try{
@@ -201,25 +206,58 @@ async function prepareScan(barcode){
       if(data) product = data;
     }catch(e){}
   }
+  return product;
+}
+
+async function logEvent(barcode, name, qty, type){
+  const entry = { barcode, name, qty, status: type, received_at:new Date().toISOString() };
+  if(sb){
+    try{
+      const { data, error } = await sb.from('scans').insert(entry).select().single();
+      if(error) throw error;
+      events.push(data);
+    }catch(e){
+      events.push({...entry, id:'local-'+Date.now()+Math.random()});
+    }
+  } else {
+    events.push({...entry, id:'local-'+Date.now()+Math.random()});
+  }
+  render();
+}
+
+async function deleteEvent(id){
+  events = events.filter(e=>e.id!==id);
+  render();
+  if(sb && !String(id).startsWith('local-')){
+    try{ await sb.from('scans').delete().eq('id', id); }catch(e){}
+  }
+}
+window.deleteEvent = deleteEvent;
+
+async function openSheet(barcode, forceAsk){
+  const product = await lookupProduct(barcode);
   pendingBarcode = barcode;
   pendingIsNew = !product;
-  pendingLocation = 'storage';
-  $('locStorage').classList.add('selected');
-  $('locShelf').classList.remove('selected');
   $('newTag').style.display = pendingIsNew ? 'block' : 'none';
+  $('sheetTitle').textContent = mode==='receiving' ? 'Confirm item received' : 'Confirm move to shelf';
   $('sheetBarcode').textContent = barcode;
   $('sheetName').value = product ? product.name : '';
+  $('nameField').style.display = (mode==='moving' && product && !forceAsk) ? 'none' : 'block';
+  $('qtyLabel').textContent = mode==='receiving' ? 'Quantity received' : 'Quantity moving';
   $('sheetQty').value = 1;
   $('overlay').classList.add('active');
   $('sheetName').focus();
 }
 
-$('locStorage').onclick = ()=>{ pendingLocation='storage'; $('locStorage').classList.add('selected'); $('locShelf').classList.remove('selected'); };
-$('locShelf').onclick = ()=>{ pendingLocation='shelf'; $('locShelf').classList.add('selected'); $('locStorage').classList.remove('selected'); };
+async function quickMove(barcode){
+  const product = await lookupProduct(barcode);
+  if(!product){ openSheet(barcode, true); return; }
+  await logEvent(barcode, product.name, 1, 'move');
+}
 
 $('sheetCancel').onclick = ()=>{ $('overlay').classList.remove('active'); };
 $('sheetConfirm').onclick = async ()=>{
-  const name = $('sheetName').value.trim();
+  const name = $('sheetName').value.trim() || (await lookupProduct(pendingBarcode))?.name;
   const qty = parseInt($('sheetQty').value) || 1;
   if(!name){ $('sheetName').focus(); return; }
   $('overlay').classList.remove('active');
@@ -233,41 +271,12 @@ $('sheetConfirm').onclick = async ()=>{
     products.push({ barcode: pendingBarcode, name });
   }
 
-  await addItem(pendingBarcode, name, qty, pendingLocation);
+  await logEvent(pendingBarcode, name, qty, mode==='receiving' ? 'in' : 'move');
 };
-
-async function addItem(barcode, name, qty, location){
-  const entry = { barcode, name, qty, status: location, received_at:new Date().toISOString() };
-  if(sb){
-    try{
-      const { data, error } = await sb.from('scans').insert(entry).select().single();
-      if(error) throw error;
-      items.push(data);
-    }catch(e){
-      items.push({...entry, id:'local-'+Date.now()+Math.random()});
-    }
-  } else {
-    items.push({...entry, id:'local-'+Date.now()+Math.random()});
-  }
-  render();
-}
-
-async function toggleLocation(id){
-  const it = items.find(i=>i.id===id);
-  if(!it) return;
-  const current = normLoc(it.status);
-  const next = current==='storage' ? 'shelf' : 'storage';
-  it.status = next; it.shelved_at = new Date().toISOString();
-  render();
-  if(sb && !String(id).startsWith('local-')){
-    try{ await sb.from('scans').update({status: next, shelved_at: it.shelved_at}).eq('id', id); }catch(e){}
-  }
-}
-window.toggleLocation = toggleLocation;
 
 $('manualAdd').onclick = ()=>{
   const v = $('manualInput').value.trim();
-  if(v){ prepareScan(v); $('manualInput').value=''; }
+  if(v){ openSheet(v, false); $('manualInput').value=''; }
 };
 $('manualInput').addEventListener('keydown', e=>{ if(e.key==='Enter') $('manualAdd').onclick(); });
 
@@ -285,7 +294,11 @@ $('scanBtn').onclick = async ()=>{
     await scanner.start(
       { facingMode:'environment' },
       { fps:10, qrbox:{width:260,height:130} },
-      (decodedText)=>{ if(!$('overlay').classList.contains('active')) prepareScan(decodedText); }
+      (decodedText)=>{
+        if($('overlay').classList.contains('active')) return;
+        if(mode==='moving') quickMove(decodedText);
+        else openSheet(decodedText, false);
+      }
     );
   }catch(e){
     $('reader').innerHTML = '<div style="padding:12px;color:var(--muted);font-size:.85rem;">Camera unavailable — use the text field below instead.</div>';
@@ -294,8 +307,8 @@ $('scanBtn').onclick = async ()=>{
 
 async function refreshList(){
   try{
-    const { data, error } = await sb.from('scans').select('*').order('received_at',{ascending:false}).limit(200);
-    if(!error){ items = data||[]; render(); }
+    const { data, error } = await sb.from('scans').select('*').order('received_at',{ascending:false}).limit(300);
+    if(!error){ events = data||[]; render(); }
   }catch(e){}
 }
 
@@ -303,11 +316,11 @@ async function refreshList(){
   try{
     sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     const [scansRes, productsRes] = await Promise.all([
-      sb.from('scans').select('*').order('received_at',{ascending:false}).limit(200),
+      sb.from('scans').select('*').order('received_at',{ascending:false}).limit(300),
       sb.from('products').select('*')
     ]);
     if(scansRes.error) throw scansRes.error;
-    items = scansRes.data || [];
+    events = scansRes.data || [];
     products = productsRes.data || [];
     sb
       .channel('scans-changes')
