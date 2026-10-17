@@ -3,30 +3,33 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Store Inventory</title>
+<title>Shrink</title>
+<link rel="icon" href="logo.png">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --bg:#fafafa; --fg:#1a1a1a; --card:#fff; --border:#e2e2e2; --accent:#2563eb; --muted:#6b7280;
   --green:#047857; --amber:#b45309; --red:#b91c1c; --greenbg:#d1fae5; --redbg:#fee2e2; --amberbg:#fef3c7;
+  --navy:#12172b; --blue-main:#1c3f8f; --blue-light:#8ecbf5; --sidebar-bg:#f3f4f6;
   box-sizing:border-box;
 }
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){ --bg:#121212; --fg:#f0f0f0; --card:#1e1e1e; --border:#333; --muted:#9ca3af;
-    --greenbg:#064e3b; --redbg:#450a0a; --amberbg:#451a03; }
-}
-:root[data-theme="dark"]{ --bg:#121212; --fg:#f0f0f0; --card:#1e1e1e; --border:#333; --muted:#9ca3af; }
 html{scroll-padding-top:env(safe-area-inset-top,0px);}
-body{margin:0; background:var(--bg); color:var(--fg); font-family:-apple-system,system-ui,sans-serif;
+body{margin:0; color:var(--fg); font-family:-apple-system,system-ui,sans-serif;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);}
-.wrap{max-width:1100px;margin:0 auto;padding:20px 24px;}
-h1{font-size:1.4rem;margin:8px 0 4px;}
-.sub{color:var(--muted);font-size:.9rem;margin-bottom:16px;}
-.tabs{display:flex;gap:8px;margin-bottom:20px;max-width:360px;}
-.tab{flex:1;padding:10px;text-align:center;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:.9rem;cursor:pointer;}
-.tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.app-shell{display:flex;min-height:100vh;}
+.sidebar{width:220px;flex-shrink:0;background:var(--sidebar-bg);padding:28px 18px;border-right:1px solid var(--border);}
+.logo{width:110px;display:block;margin:0 auto 28px;}
+.nav{display:flex;flex-direction:column;gap:8px;}
+.navtile{padding:13px 16px;border-radius:10px;font-weight:600;font-size:.92rem;color:var(--navy);cursor:pointer;background:transparent;}
+.navtile:hover{background:#e5e7eb;}
+.navtile.active{background:var(--blue-main);color:#fff;}
+.main{flex:1;background:var(--blue-main);padding:32px;min-width:0;}
+h1{font-size:1.3rem;margin:0 0 4px;color:#fff;}
+.sub{color:#dbe4ff;font-size:.9rem;margin-bottom:16px;}
 .view{display:none;}
 .view.active{display:block;}
+.panel{background:var(--card);border-radius:14px;padding:20px;}
+.upload-card .sub, .panel .sub{color:var(--muted);}
 button{font:inherit;cursor:pointer;}
 .upload-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;max-width:560px;}
 .upload-card h3{margin:0 0 4px;}
@@ -55,15 +58,20 @@ th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>📊 Store Inventory</h1>
-  <div class="tabs">
-    <div class="tab active" data-view="invoices">Invoices</div>
-    <div class="tab" data-view="report">Report</div>
+<div class="app-shell">
+  <div class="sidebar">
+    <img class="logo" src="logo.png" alt="Shrink">
+    <div class="nav">
+      <div class="navtile active" data-view="invoices">Invoices</div>
+      <div class="navtile" data-view="report">Report</div>
+    </div>
   </div>
+  <div class="main">
   <div id="offlineNotice" class="offline" style="display:none">Couldn't reach the database — saves won't persist.</div>
 
   <div class="view active" id="view-invoices">
+    <h1>Invoices</h1>
+    <div class="sub">Upload a shipment invoice or a POS sales report to update your numbers.</div>
     <div class="upload-card">
       <h3>Co-op Invoice</h3>
       <div class="sub">Upload a shipment invoice PDF — read automatically, review before saving.</div>
@@ -88,9 +96,14 @@ th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;
   </div>
 
   <div class="view" id="view-report">
+    <h1>Report</h1>
+    <div class="sub">Received vs. sold, by product.</div>
     <div class="dash-stats" id="dashStats"></div>
-    <input id="reportSearch" class="search" placeholder="Search a product or code...">
-    <table><thead><tr><th>Product</th><th>Received</th><th>Sold</th><th>Remaining</th><th>Sell-through</th></tr></thead><tbody id="reportBody"></tbody></table>
+    <div class="panel">
+      <input id="reportSearch" class="search" placeholder="Search a product or code...">
+      <table><thead><tr><th>Product</th><th>Received</th><th>Sold</th><th>Remaining</th><th>Sell-through</th></tr></thead><tbody id="reportBody"></tbody></table>
+    </div>
+  </div>
   </div>
 </div>
 
@@ -100,9 +113,9 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 let sb = null, events = [], products = [], reportFilter = '', pendingKind = null, reviewItems = [];
 const $=id=>document.getElementById(id);
 
-document.querySelectorAll('.tab').forEach(tab=>{
+document.querySelectorAll('.navtile').forEach(tab=>{
   tab.onclick=()=>{
-    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.navtile').forEach(t=>t.classList.remove('active'));
     document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
     tab.classList.add('active');
     $('view-'+tab.dataset.view).classList.add('active');
