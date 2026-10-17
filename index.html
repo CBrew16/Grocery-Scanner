@@ -3,156 +3,102 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Receiving Scan</title>
+<title>Store Inventory</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
 :root{
-  --bg:#fafafa; --fg:#1a1a1a; --card:#fff; --border:#e2e2e2; --accent:#2563eb; --muted:#6b7280; --green:#047857;
+  --bg:#fafafa; --fg:#1a1a1a; --card:#fff; --border:#e2e2e2; --accent:#2563eb; --muted:#6b7280;
+  --green:#047857; --amber:#b45309; --red:#b91c1c; --greenbg:#d1fae5; --redbg:#fee2e2; --amberbg:#fef3c7;
   box-sizing:border-box;
 }
 @media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){ --bg:#121212; --fg:#f0f0f0; --card:#1e1e1e; --border:#333; --muted:#9ca3af; }
+  :root:not([data-theme="light"]){ --bg:#121212; --fg:#f0f0f0; --card:#1e1e1e; --border:#333; --muted:#9ca3af;
+    --greenbg:#064e3b; --redbg:#450a0a; --amberbg:#451a03; }
 }
 :root[data-theme="dark"]{ --bg:#121212; --fg:#f0f0f0; --card:#1e1e1e; --border:#333; --muted:#9ca3af; }
 html{scroll-padding-top:env(safe-area-inset-top,0px);}
 body{margin:0; background:var(--bg); color:var(--fg); font-family:-apple-system,system-ui,sans-serif;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);}
-.wrap{max-width:480px;margin:0 auto;padding:16px;}
-h1{font-size:1.25rem;margin:8px 0 4px;}
-.sub{color:var(--muted);font-size:.85rem;margin-bottom:16px;}
-.tabs{display:flex;gap:6px;margin-bottom:16px;}
-.tab{flex:1;padding:8px;text-align:center;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:.85rem;}
+.wrap{max-width:1100px;margin:0 auto;padding:20px 24px;}
+h1{font-size:1.4rem;margin:8px 0 4px;}
+.sub{color:var(--muted);font-size:.9rem;margin-bottom:16px;}
+.tabs{display:flex;gap:8px;margin-bottom:20px;max-width:360px;}
+.tab{flex:1;padding:10px;text-align:center;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:.9rem;cursor:pointer;}
 .tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
 .view{display:none;}
 .view.active{display:block;}
-.stats{display:flex;gap:8px;margin-bottom:16px;}
-.stat{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;}
-.stat .num{font-size:1.4rem;font-weight:700;}
-.stat .label{font-size:.7rem;color:var(--muted);}
-button{font:inherit;}
-.mode-toggle{display:flex;gap:8px;margin-bottom:12px;}
-.mode-btn{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--fg);font-weight:600;font-size:.85rem;}
-.mode-btn.selected.receiving{background:var(--accent);color:#fff;border-color:var(--accent);}
-.mode-btn.selected.moving{background:var(--green);color:#fff;border-color:var(--green);}
-.scan-btn{width:100%;padding:14px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;font-size:1rem;}
-#reader{width:100%;border-radius:10px;overflow:hidden;margin:12px 0;display:none;}
-.manual{display:flex;gap:8px;margin:12px 0;}
-.manual input{flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);min-width:0;}
-.manual button{padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);}
-.search{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);margin-bottom:12px;box-sizing:border-box;}
-ul{list-style:none;padding:0;margin:16px 0 0;max-width:100%;overflow-x:auto;}
-li{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px;}
-.pname{font-weight:600;}
-.meta{font-size:.72rem;color:var(--muted);}
-.tag{font-size:.7rem;padding:3px 8px;border-radius:999px;border:1px solid var(--border);white-space:nowrap;}
-.tag.in{color:#b45309;border-color:#b45309;}
-.tag.move{color:#047857;border-color:#047857;}
-.del{background:transparent;border:none;color:var(--muted);font-size:1rem;padding:4px 6px;cursor:pointer;}
-.offline{font-size:.75rem;color:#b91c1c;margin-bottom:8px;}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:50;}
-.overlay.active{display:flex;}
-.sheet{background:var(--card);width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px));}
-.sheet h3{margin:0 0 4px;font-size:1.05rem;}
-.sheet .code{font-size:.8rem;color:var(--muted);margin-bottom:12px;}
-.field{margin-bottom:12px;}
-.field label{display:block;font-size:.75rem;color:var(--muted);margin-bottom:4px;}
-.field input{width:100%;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--fg);box-sizing:border-box;}
-.sheet-btns{display:flex;gap:8px;margin-top:4px;}
-.sheet-btns button{flex:1;padding:12px;border-radius:10px;border:1px solid var(--border);font-weight:600;}
-.btn-confirm{background:var(--accent);color:#fff;border-color:var(--accent);}
-.btn-cancel{background:transparent;color:var(--fg);}
-.newtag{font-size:.7rem;color:var(--accent);margin-bottom:8px;}
-table{width:100%;border-collapse:collapse;font-size:.85rem;}
-th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--border);}
-th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;}
+button{font:inherit;cursor:pointer;}
+.upload-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;max-width:560px;}
+.upload-card h3{margin:0 0 4px;}
+.upload-card input[type=file]{margin:10px 0;width:100%;}
+.btn{padding:12px 18px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;font-size:.95rem;}
+.btn.pos{background:var(--green);}
+.status-msg{font-size:.85rem;color:var(--muted);margin-top:8px;}
+table{width:100%;border-collapse:collapse;font-size:.9rem;}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);}
+th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;}
+.sheet-btns{margin-top:14px;}
+.offline{font-size:.8rem;color:var(--red);margin-bottom:12px;}
+.dash-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;}
+.dash-stat{border-radius:12px;padding:16px;border:1px solid var(--border);}
+.dash-stat.received{background:var(--greenbg);}
+.dash-stat.sold{background:var(--amberbg);}
+.dash-stat.remaining{background:var(--card);}
+.dash-stat .num{font-size:1.8rem;font-weight:700;}
+.dash-stat .label{font-size:.78rem;color:var(--muted);margin-top:2px;}
+.search{width:100%;max-width:320px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--fg);margin-bottom:16px;box-sizing:border-box;}
+.bar-track{display:flex;height:8px;border-radius:5px;overflow:hidden;background:var(--border);width:120px;}
+.bar-sold{background:var(--green);}
+.bar-remain{background:var(--amber);}
+.neg{color:var(--red);font-weight:700;}
+.pos-val{color:var(--green);font-weight:700;}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>📦 Store Scan</h1>
+  <h1>📊 Store Inventory</h1>
   <div class="tabs">
-    <div class="tab active" data-view="scan">Scan</div>
-    <div class="tab" data-view="invoices">Invoices</div>
-    <div class="tab" data-view="catalogue">Catalogue</div>
+    <div class="tab active" data-view="invoices">Invoices</div>
     <div class="tab" data-view="report">Report</div>
   </div>
-  <div id="offlineNotice" class="offline" style="display:none">Couldn't reach the database — running locally on this device only.</div>
+  <div id="offlineNotice" class="offline" style="display:none">Couldn't reach the database — saves won't persist.</div>
 
-  <div class="view active" id="view-scan">
-    <div class="stats">
-      <div class="stat"><div class="num" id="backCount">0</div><div class="label">In storage</div></div>
-      <div class="stat"><div class="num" id="frontCount">0</div><div class="label">On shelf</div></div>
+  <div class="view active" id="view-invoices">
+    <div class="upload-card">
+      <h3>Co-op Invoice</h3>
+      <div class="sub">Upload a shipment invoice PDF — read automatically, review before saving.</div>
+      <input type="file" id="invoiceFile" accept="application/pdf">
+      <button class="btn" id="invoiceUploadBtn">Read Invoice</button>
+      <div class="status-msg" id="invoiceStatus"></div>
     </div>
-    <div class="mode-toggle">
-      <button class="mode-btn selected receiving" id="modeReceiving" type="button">Receiving</button>
-      <button class="mode-btn moving" id="modeMoving" type="button">Moving to shelf</button>
-    </div>
-    <div class="sub" id="modeHint">Scan each item as it arrives from the wholesaler.</div>
-    <button class="scan-btn" id="scanBtn">Start Camera Scan</button>
-    <div id="reader"></div>
-    <div class="manual">
-      <input id="manualInput" placeholder="Or type a barcode" inputmode="numeric">
-      <button id="manualAdd">Add</button>
-    </div>
-    <ul id="list"></ul>
-  </div>
 
-  <div class="view" id="view-invoices">
-    <div class="sub">Upload a Co-op invoice PDF. It'll be read automatically — review before saving.</div>
-    <input type="file" id="invoiceFile" accept="application/pdf" style="margin-bottom:12px;">
-    <button class="scan-btn" id="invoiceUploadBtn">Read Invoice</button>
-    <div id="invoiceStatus" class="sub" style="margin-top:10px;"></div>
-    <div id="invoiceReview" style="display:none;margin-top:16px;">
-      <table><thead><tr><th>Code</th><th>Name</th><th>Qty</th><th></th></tr></thead><tbody id="invoiceBody"></tbody></table>
-      <div class="sheet-btns" style="margin-top:12px;">
-        <button class="btn-confirm" id="invoiceConfirm" style="flex:1;">Confirm & Save All</button>
-      </div>
+    <div class="upload-card">
+      <h3>POS Sales Report</h3>
+      <div class="sub">Upload a daily sales report PDF — read automatically, review before saving.</div>
+      <input type="file" id="posFile" accept="application/pdf">
+      <button class="btn pos" id="posUploadBtn">Read Sales Report</button>
+      <div class="status-msg" id="posStatus"></div>
     </div>
-  </div>
 
-  <div class="view" id="view-catalogue">
-    <div class="sub">Products your scans have matched so far.</div>
-    <table><thead><tr><th>Barcode</th><th>Name</th></tr></thead><tbody id="catalogueBody"></tbody></table>
+    <div id="reviewCard" style="display:none;" class="upload-card" style="max-width:720px;">
+      <h3 id="reviewTitle">Review</h3>
+      <table><thead><tr><th>Code</th><th>Name</th><th>Qty</th><th></th></tr></thead><tbody id="reviewBody"></tbody></table>
+      <div class="sheet-btns"><button class="btn" id="reviewConfirm">Confirm & Save All</button></div>
+    </div>
   </div>
 
   <div class="view" id="view-report">
-    <div class="sub">Back vs. front quantity, by product.</div>
-    <input id="reportSearch" class="search" placeholder="Search a product or barcode...">
-    <table><thead><tr><th>Product</th><th>Back</th><th>Front</th><th>Total</th></tr></thead><tbody id="reportBody"></tbody></table>
-  </div>
-</div>
-
-<div class="overlay" id="overlay">
-  <div class="sheet">
-    <div class="newtag" id="newTag" style="display:none">New product — not in your catalogue yet</div>
-    <h3 id="sheetTitle">Confirm item</h3>
-    <div class="code" id="sheetBarcode"></div>
-    <div class="field" id="nameField"><label>Product name</label><input id="sheetName" placeholder="e.g. 2% Milk 1L"></div>
-    <div class="field"><label id="qtyLabel">Quantity</label><input id="sheetQty" type="number" value="1" min="1"></div>
-    <div class="sheet-btns">
-      <button class="btn-cancel" id="sheetCancel">Cancel</button>
-      <button class="btn-confirm" id="sheetConfirm">Confirm</button>
-    </div>
+    <div class="dash-stats" id="dashStats"></div>
+    <input id="reportSearch" class="search" placeholder="Search a product or code...">
+    <table><thead><tr><th>Product</th><th>Received</th><th>Sold</th><th>Remaining</th><th>Sell-through</th></tr></thead><tbody id="reportBody"></tbody></table>
   </div>
 </div>
 
 <script>
 const SUPABASE_URL = 'https://ayqtssokwkbwswgngsez.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5cXRzc29rd2tid3N3Z25nc2V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1OTA5MTMsImV4cCI6MjEwNzE2NjkxM30.SEAm_MwXlLOitkeNB71uuRrYiDdV3YtcruoYX8_WeKo';
-let sb = null, events = [], products = [], mode = 'receiving', pendingBarcode = null, pendingIsNew = false, reportFilter = '';
+let sb = null, events = [], products = [], reportFilter = '', pendingKind = null, reviewItems = [];
 const $=id=>document.getElementById(id);
-
-$('modeReceiving').onclick = ()=>{
-  mode='receiving';
-  $('modeReceiving').classList.add('selected'); $('modeMoving').classList.remove('selected');
-  $('modeHint').textContent = 'Scan each item as it arrives from the wholesaler.';
-};
-$('modeMoving').onclick = ()=>{
-  mode='moving';
-  $('modeMoving').classList.add('selected'); $('modeReceiving').classList.remove('selected');
-  $('modeHint').textContent = 'Scan each unit as you carry it to the shelf. Known products log instantly.';
-};
 
 document.querySelectorAll('.tab').forEach(tab=>{
   tab.onclick=()=>{
@@ -161,268 +107,142 @@ document.querySelectorAll('.tab').forEach(tab=>{
     tab.classList.add('active');
     $('view-'+tab.dataset.view).classList.add('active');
     if(tab.dataset.view==='report') renderReport();
-    if(tab.dataset.view==='invoices'){ /* no-op, static until upload */ }
   };
 });
 
-function render(){
-  const sorted = [...events].sort((a,b)=> (b.received_at||'').localeCompare(a.received_at||''));
-  $('list').innerHTML = sorted.slice(0,100).map(ev=>`
-    <li>
-      <div>
-        <div class="pname">${ev.name || ev.barcode}</div>
-        <div class="meta">${ev.qty||1} unit${(ev.qty||1)>1?'s':''} · ${new Date(ev.received_at).toLocaleString()}</div>
-      </div>
-      <span class="tag ${ev.status}">${ev.status==='in'?'Received':'Moved'}</span>
-      <button class="del" title="Delete" onclick="deleteEvent('${ev.id}')">&times;</button>
-    </li>`).join('');
-
-  const totals = computeTotals();
-  let back=0, front=0;
-  Object.values(totals).forEach(t=>{ back += Math.max(t.back,0); front += t.front; });
-  $('backCount').textContent = back;
-  $('frontCount').textContent = front;
-
-  $('catalogueBody').innerHTML = products.map(p=>`<tr><td style="font-family:monospace">${p.barcode}</td><td>${p.name}</td></tr>`).join('')
-    || '<tr><td colspan="2" style="color:var(--muted)">No products matched yet</td></tr>';
-}
-
-function computeTotals(){
-  const byBarcode = {};
-  events.forEach(ev=>{
-    const key = ev.barcode;
-    if(!byBarcode[key]) byBarcode[key] = {name: ev.name || ev.barcode, barcode: ev.barcode, back:0, front:0};
-    if(ev.status==='in') byBarcode[key].back += (ev.qty||1);
-    else { byBarcode[key].back -= (ev.qty||1); byBarcode[key].front += (ev.qty||1); }
-  });
-  return byBarcode;
-}
-
-function renderReport(){
-  const totals = computeTotals();
-  const filter = reportFilter.trim().toLowerCase();
-  const rows = Object.values(totals).filter(r =>
-    !filter || r.name.toLowerCase().includes(filter) || r.barcode.includes(filter)
-  );
-  $('reportBody').innerHTML = rows.map(r=>{
-    const back = Math.max(r.back,0);
-    const total = back + r.front;
-    return `<tr><td>${r.name}</td><td>${back}</td><td>${r.front}</td><td>${total}</td></tr>`;
-  }).join('') || `<tr><td colspan="4" style="color:var(--muted)">${filter ? 'No matches' : 'No scans yet'}</td></tr>`;
-}
-
-$('reportSearch').addEventListener('input', e=>{ reportFilter = e.target.value; renderReport(); });
-
-async function lookupProduct(barcode){
-  let product = products.find(p=>p.barcode===barcode);
-  if(!product && sb){
-    try{
-      const { data } = await sb.from('products').select('*').eq('barcode', barcode).maybeSingle();
-      if(data) product = data;
-    }catch(e){}
+async function lookupProduct(code){
+  let p = products.find(x=>x.barcode===code);
+  if(!p && sb){
+    try{ const { data } = await sb.from('products').select('*').eq('barcode', code).maybeSingle(); if(data) p=data; }catch(e){}
   }
-  return product;
+  return p;
 }
 
-async function logEvent(barcode, name, qty, type){
-  const entry = { barcode, name, qty, status: type, received_at:new Date().toISOString() };
+async function logEvent(code, name, qty, type){
+  const entry = { barcode: code, name, qty, status: type, received_at:new Date().toISOString() };
   if(sb){
     try{
       const { data, error } = await sb.from('scans').insert(entry).select().single();
       if(error) throw error;
       events.push(data);
-    }catch(e){
-      events.push({...entry, id:'local-'+Date.now()+Math.random()});
-    }
-  } else {
-    events.push({...entry, id:'local-'+Date.now()+Math.random()});
-  }
-  render();
+    }catch(e){ events.push({...entry, id:'local-'+Date.now()+Math.random()}); }
+  } else { events.push({...entry, id:'local-'+Date.now()+Math.random()}); }
 }
-
-async function deleteEvent(id){
-  events = events.filter(e=>e.id!==id);
-  render();
-  if(sb && !String(id).startsWith('local-')){
-    try{ await sb.from('scans').delete().eq('id', id); }catch(e){}
-  }
-}
-window.deleteEvent = deleteEvent;
-
-async function openSheet(barcode, forceAsk){
-  const product = await lookupProduct(barcode);
-  pendingBarcode = barcode;
-  pendingIsNew = !product;
-  $('newTag').style.display = pendingIsNew ? 'block' : 'none';
-  $('sheetTitle').textContent = mode==='receiving' ? 'Confirm item received' : 'Confirm move to shelf';
-  $('sheetBarcode').textContent = barcode;
-  $('sheetName').value = product ? product.name : '';
-  $('nameField').style.display = (mode==='moving' && product && !forceAsk) ? 'none' : 'block';
-  $('qtyLabel').textContent = mode==='receiving' ? 'Quantity received' : 'Quantity moving';
-  $('sheetQty').value = 1;
-  $('overlay').classList.add('active');
-  $('sheetName').focus();
-}
-
-async function quickMove(barcode){
-  const product = await lookupProduct(barcode);
-  if(!product){ openSheet(barcode, true); return; }
-  await logEvent(barcode, product.name, 1, 'move');
-}
-
-$('sheetCancel').onclick = ()=>{ $('overlay').classList.remove('active'); };
-$('sheetConfirm').onclick = async ()=>{
-  const name = $('sheetName').value.trim() || (await lookupProduct(pendingBarcode))?.name;
-  const qty = parseInt($('sheetQty').value) || 1;
-  if(!name){ $('sheetName').focus(); return; }
-  $('overlay').classList.remove('active');
-
-  if(pendingIsNew && sb){
-    try{
-      await sb.from('products').insert({ barcode: pendingBarcode, name });
-      products.push({ barcode: pendingBarcode, name });
-    }catch(e){}
-  } else if(pendingIsNew){
-    products.push({ barcode: pendingBarcode, name });
-  }
-
-  await logEvent(pendingBarcode, name, qty, mode==='receiving' ? 'in' : 'move');
-};
-
-$('manualAdd').onclick = ()=>{
-  const v = $('manualInput').value.trim();
-  if(v){ openSheet(v, false); $('manualInput').value=''; }
-};
-$('manualInput').addEventListener('keydown', e=>{ if(e.key==='Enter') $('manualAdd').onclick(); });
-
-let scanner=null, scanning=false;
-$('scanBtn').onclick = async ()=>{
-  if(scanning){
-    if(scanner){ try{ await scanner.stop(); scanner.clear(); }catch(e){} }
-    scanning=false; $('reader').style.display='none'; $('scanBtn').textContent='Start Camera Scan';
-    return;
-  }
-  $('reader').style.display='block'; $('scanBtn').textContent='Stop Camera';
-  scanning=true;
-  scanner = new Html5Qrcode('reader');
-  try{
-    await scanner.start(
-      { facingMode:'environment' },
-      { fps:10, qrbox:{width:260,height:130} },
-      (decodedText)=>{
-        if($('overlay').classList.contains('active')) return;
-        if(mode==='moving') quickMove(decodedText);
-        else openSheet(decodedText, false);
-      }
-    );
-  }catch(e){
-    $('reader').innerHTML = '<div style="padding:12px;color:var(--muted);font-size:.85rem;">Camera unavailable — use the text field below instead.</div>';
-  }
-};
-
-let invoiceItems = [];
 
 function fileToBase64(file){
   return new Promise((resolve, reject)=>{
-    const reader = new FileReader();
-    reader.onload = ()=> resolve(reader.result.split(',')[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    const r = new FileReader();
+    r.onload = ()=> resolve(r.result.split(',')[1]);
+    r.onerror = reject;
+    r.readAsDataURL(file);
   });
 }
 
-$('invoiceUploadBtn').onclick = async ()=>{
-  const fileInput = $('invoiceFile');
-  if(!fileInput.files.length){ $('invoiceStatus').textContent = 'Choose a PDF first.'; return; }
-  const file = fileInput.files[0];
-  $('invoiceStatus').textContent = 'Reading invoice... this can take a few seconds.';
-  $('invoiceReview').style.display = 'none';
+async function handleUpload(kind, fileInputId, statusId){
+  const file = $(fileInputId).files[0];
+  if(!file){ $(statusId).textContent = 'Choose a PDF first.'; return; }
+  $(statusId).textContent = 'Reading document... this can take a few seconds.';
+  $('reviewCard').style.display = 'none';
   try{
     const base64 = await fileToBase64(file);
-    const resp = await fetch('/api/parse-invoice', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: file.name, data: base64 })
+    const resp = await fetch('/api/parse-document', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ kind, filename:file.name, data: base64 })
     });
     const result = await resp.json();
-    if(!resp.ok){
-      $('invoiceStatus').textContent = 'Error: ' + (result.error || 'could not read invoice');
-      return;
-    }
-    invoiceItems = result.items || [];
-    $('invoiceStatus').textContent = `Found ${invoiceItems.length} line item${invoiceItems.length===1?'':'s'}. Review before saving.`;
-    renderInvoiceReview();
-    $('invoiceReview').style.display = 'block';
-  }catch(e){
-    $('invoiceStatus').textContent = 'Something went wrong reading this file. Try again.';
-  }
-};
+    if(!resp.ok){ $(statusId).textContent = 'Error: ' + (result.error||'could not read document'); return; }
+    reviewItems = result.items || [];
+    pendingKind = kind;
+    $(statusId).textContent = `Found ${reviewItems.length} line item${reviewItems.length===1?'':'s'}. Review below.`;
+    $('reviewTitle').textContent = kind==='invoice' ? 'Review: Invoice' : 'Review: POS Sales';
+    renderReview();
+    $('reviewCard').style.display = 'block';
+  }catch(e){ $(statusId).textContent = 'Something went wrong reading this file.'; }
+}
 
-function renderInvoiceReview(){
-  $('invoiceBody').innerHTML = invoiceItems.map((it,i)=>`
+$('invoiceUploadBtn').onclick = ()=> handleUpload('invoice','invoiceFile','invoiceStatus');
+$('posUploadBtn').onclick = ()=> handleUpload('pos','posFile','posStatus');
+
+function renderReview(){
+  $('reviewBody').innerHTML = reviewItems.map((it,i)=>`
     <tr>
       <td><input data-i="${i}" data-f="code" value="${it.code||''}" style="width:90px;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);"></td>
-      <td><input data-i="${i}" data-f="name" value="${it.name||''}" style="width:140px;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);"></td>
+      <td><input data-i="${i}" data-f="name" value="${it.name||''}" style="width:160px;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);"></td>
       <td><input data-i="${i}" data-f="qty" type="number" value="${it.qty||1}" style="width:60px;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);"></td>
-      <td><button class="del" onclick="removeInvoiceRow(${i})">&times;</button></td>
+      <td><button onclick="removeReviewRow(${i})" style="background:none;border:none;color:var(--muted);">&times;</button></td>
     </tr>`).join('');
-  document.querySelectorAll('#invoiceBody input').forEach(inp=>{
+  document.querySelectorAll('#reviewBody input').forEach(inp=>{
     inp.addEventListener('change', e=>{
-      const i = +e.target.dataset.i, f = e.target.dataset.f;
-      invoiceItems[i][f] = f==='qty' ? (parseInt(e.target.value)||1) : e.target.value;
+      const i=+e.target.dataset.i, f=e.target.dataset.f;
+      reviewItems[i][f] = f==='qty' ? (parseInt(e.target.value)||1) : e.target.value;
     });
   });
 }
+function removeReviewRow(i){ reviewItems.splice(i,1); renderReview(); }
+window.removeReviewRow = removeReviewRow;
 
-function removeInvoiceRow(i){
-  invoiceItems.splice(i,1);
-  renderInvoiceReview();
-}
-window.removeInvoiceRow = removeInvoiceRow;
-
-$('invoiceConfirm').onclick = async ()=>{
-  for(const it of invoiceItems){
-    const code = (it.code || '').trim();
-    const name = (it.name || '').trim();
-    const qty = it.qty || 1;
+$('reviewConfirm').onclick = async ()=>{
+  for(const it of reviewItems){
+    const code=(it.code||'').trim(), name=(it.name||'').trim(), qty=it.qty||1;
     if(!code || !name) continue;
-    if(!products.find(p=>p.barcode===code)){
+    if(!(await lookupProduct(code))){
       if(sb){ try{ await sb.from('products').insert({ barcode: code, name }); }catch(e){} }
       products.push({ barcode: code, name });
     }
-    await logEvent(code, name, qty, 'in');
+    await logEvent(code, name, qty, pendingKind==='invoice' ? 'in' : 'out');
   }
-  $('invoiceStatus').textContent = 'Saved to inventory.';
-  $('invoiceReview').style.display = 'none';
-  invoiceItems = [];
-  $('invoiceFile').value = '';
+  $('reviewCard').style.display='none';
+  reviewItems=[]; $('invoiceFile').value=''; $('posFile').value='';
 };
 
-async function refreshList(){
-  try{
-    const { data, error } = await sb.from('scans').select('*').order('received_at',{ascending:false}).limit(300);
-    if(!error){ events = data||[]; render(); }
-  }catch(e){}
+function computeTotals(){
+  const byCode = {};
+  events.forEach(ev=>{
+    const k = ev.barcode;
+    if(!byCode[k]) byCode[k] = {name: ev.name||ev.barcode, code: ev.barcode, received:0, sold:0};
+    if(ev.status==='in') byCode[k].received += (ev.qty||1);
+    else byCode[k].sold += (ev.qty||1);
+  });
+  return byCode;
 }
+
+function renderReport(){
+  const totals = computeTotals();
+  const rows = Object.values(totals);
+  const sumR = rows.reduce((s,r)=>s+r.received,0);
+  const sumS = rows.reduce((s,r)=>s+r.sold,0);
+  const sumRem = sumR - sumS;
+  $('dashStats').innerHTML = `
+    <div class="dash-stat received"><div class="num">${sumR}</div><div class="label">Received</div></div>
+    <div class="dash-stat sold"><div class="num">${sumS}</div><div class="label">Sold</div></div>
+    <div class="dash-stat remaining"><div class="num ${sumRem<0?'neg':''}">${sumRem}</div><div class="label">Remaining (should be on hand)</div></div>`;
+
+  const filter = reportFilter.trim().toLowerCase();
+  const filtered = rows.filter(r => !filter || r.name.toLowerCase().includes(filter) || r.code.includes(filter));
+  $('reportBody').innerHTML = filtered.map(r=>{
+    const remaining = r.received - r.sold;
+    const soldPct = r.received>0 ? Math.min(100, (r.sold/r.received)*100) : 0;
+    const remPct = 100 - soldPct;
+    return `<tr>
+      <td>${r.name}</td><td>${r.received}</td><td>${r.sold}</td>
+      <td class="${remaining<0?'neg':''}">${remaining}</td>
+      <td><div class="bar-track"><div class="bar-sold" style="width:${soldPct}%"></div><div class="bar-remain" style="width:${remPct}%"></div></div></td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5" style="color:var(--muted)">${filter?'No matches':'No data yet — upload an invoice or sales report'}</td></tr>`;
+}
+$('reportSearch').addEventListener('input', e=>{ reportFilter = e.target.value; renderReport(); });
 
 (async function init(){
   try{
     sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     const [scansRes, productsRes] = await Promise.all([
-      sb.from('scans').select('*').order('received_at',{ascending:false}).limit(300),
+      sb.from('scans').select('*').order('received_at',{ascending:false}).limit(1000),
       sb.from('products').select('*')
     ]);
     if(scansRes.error) throw scansRes.error;
     events = scansRes.data || [];
     products = productsRes.data || [];
-    sb
-      .channel('scans-changes')
-      .on('postgres_changes', { event:'*', schema:'public', table:'scans' }, ()=>{ refreshList(); })
-      .subscribe();
-  }catch(e){
-    $('offlineNotice').style.display='block';
-  }
-  render();
+  }catch(e){ $('offlineNotice').style.display='block'; }
 })();
 </script>
 </body>
