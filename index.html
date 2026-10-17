@@ -73,6 +73,7 @@ th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;
   <h1>📦 Store Scan</h1>
   <div class="tabs">
     <div class="tab active" data-view="scan">Scan</div>
+    <div class="tab" data-view="invoices">Invoices</div>
     <div class="tab" data-view="catalogue">Catalogue</div>
     <div class="tab" data-view="report">Report</div>
   </div>
@@ -95,6 +96,19 @@ th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;
       <button id="manualAdd">Add</button>
     </div>
     <ul id="list"></ul>
+  </div>
+
+  <div class="view" id="view-invoices">
+    <div class="sub">Upload a Co-op invoice PDF. It'll be read automatically — review before saving.</div>
+    <input type="file" id="invoiceFile" accept="application/pdf" style="margin-bottom:12px;">
+    <button class="scan-btn" id="invoiceUploadBtn">Read Invoice</button>
+    <div id="invoiceStatus" class="sub" style="margin-top:10px;"></div>
+    <div id="invoiceReview" style="display:none;margin-top:16px;">
+      <table><thead><tr><th>Code</th><th>Name</th><th>Qty</th><th></th></tr></thead><tbody id="invoiceBody"></tbody></table>
+      <div class="sheet-btns" style="margin-top:12px;">
+        <button class="btn-confirm" id="invoiceConfirm" style="flex:1;">Confirm & Save All</button>
+      </div>
+    </div>
   </div>
 
   <div class="view" id="view-catalogue">
@@ -147,6 +161,7 @@ document.querySelectorAll('.tab').forEach(tab=>{
     tab.classList.add('active');
     $('view-'+tab.dataset.view).classList.add('active');
     if(tab.dataset.view==='report') renderReport();
+    if(tab.dataset.view==='invoices'){ /* no-op, static until upload */ }
   };
 });
 
@@ -303,6 +318,84 @@ $('scanBtn').onclick = async ()=>{
   }catch(e){
     $('reader').innerHTML = '<div style="padding:12px;color:var(--muted);font-size:.85rem;">Camera unavailable — use the text field below instead.</div>';
   }
+};
+
+let invoiceItems = [];
+
+function fileToBase64(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=> resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+$('invoiceUploadBtn').onclick = async ()=>{
+  const fileInput = $('invoiceFile');
+  if(!fileInput.files.length){ $('invoiceStatus').textContent = 'Choose a PDF first.'; return; }
+  const file = fileInput.files[0];
+  $('invoiceStatus').textContent = 'Reading invoice... this can take a few seconds.';
+  $('invoiceReview').style.display = 'none';
+  try{
+    const base64 = await fileToBase64(file);
+    const resp = await fetch('/api/parse-invoice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: file.name, data: base64 })
+    });
+    const result = await resp.json();
+    if(!resp.ok){
+      $('invoiceStatus').textContent = 'Error: ' + (result.error || 'could not read invoice');
+      return;
+    }
+    invoiceItems = result.items || [];
+    $('invoiceStatus').textContent = `Found ${invoiceItems.length} line item${invoiceItems.length===1?'':'s'}. Review before saving.`;
+    renderInvoiceReview();
+    $('invoiceReview').style.display = 'block';
+  }catch(e){
+    $('invoiceStatus').textContent = 'Something went wrong reading this file. Try again.';
+  }
+};
+
+function renderInvoiceReview(){
+  $('invoiceBody').innerHTML = invoiceItems.map((it,i)=>`
+    <tr>
+      <td><input data-i="${i}" data-f="code" value="${it.code||''}" style="width:90px;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);"></td>
+      <td><input data-i="${i}" data-f="name" value="${it.name||''}" style="width:140px;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);"></td>
+      <td><input data-i="${i}" data-f="qty" type="number" value="${it.qty||1}" style="width:60px;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);"></td>
+      <td><button class="del" onclick="removeInvoiceRow(${i})">&times;</button></td>
+    </tr>`).join('');
+  document.querySelectorAll('#invoiceBody input').forEach(inp=>{
+    inp.addEventListener('change', e=>{
+      const i = +e.target.dataset.i, f = e.target.dataset.f;
+      invoiceItems[i][f] = f==='qty' ? (parseInt(e.target.value)||1) : e.target.value;
+    });
+  });
+}
+
+function removeInvoiceRow(i){
+  invoiceItems.splice(i,1);
+  renderInvoiceReview();
+}
+window.removeInvoiceRow = removeInvoiceRow;
+
+$('invoiceConfirm').onclick = async ()=>{
+  for(const it of invoiceItems){
+    const code = (it.code || '').trim();
+    const name = (it.name || '').trim();
+    const qty = it.qty || 1;
+    if(!code || !name) continue;
+    if(!products.find(p=>p.barcode===code)){
+      if(sb){ try{ await sb.from('products').insert({ barcode: code, name }); }catch(e){} }
+      products.push({ barcode: code, name });
+    }
+    await logEvent(code, name, qty, 'in');
+  }
+  $('invoiceStatus').textContent = 'Saved to inventory.';
+  $('invoiceReview').style.display = 'none';
+  invoiceItems = [];
+  $('invoiceFile').value = '';
 };
 
 async function refreshList(){
