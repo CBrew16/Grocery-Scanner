@@ -4,25 +4,28 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Shrink</title>
-<link rel="icon" href="logo.png">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%2312172b'/%3E%3Ctext x='50' y='72' font-family='Arial' font-weight='900' font-size='60' text-anchor='middle' fill='%238ecbf5'%3ES%3C/text%3E%3C/svg%3E">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --bg:#fafafa; --fg:#1a1a1a; --card:#fff; --border:#e2e2e2; --accent:#2563eb; --muted:#6b7280;
   --green:#047857; --amber:#b45309; --red:#b91c1c; --greenbg:#d1fae5; --redbg:#fee2e2; --amberbg:#fef3c7;
-  --navy:#12172b; --blue-main:#1c3f8f; --blue-light:#8ecbf5; --sidebar-bg:#f3f4f6;
+  --navy:#12172b; --blue-main:rgb(27,54,93); --blue-light:#8ecbf5; --sidebar-bg:rgb(230,238,245);
   box-sizing:border-box;
 }
 html{scroll-padding-top:env(safe-area-inset-top,0px);}
 body{margin:0; color:var(--fg); font-family:-apple-system,system-ui,sans-serif;
   padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);}
 .app-shell{display:flex;min-height:100vh;}
-.sidebar{width:220px;flex-shrink:0;background:var(--sidebar-bg);padding:28px 18px;border-right:1px solid var(--border);}
-.logo{width:110px;display:block;margin:0 auto 28px;}
+.sidebar{width:165px;flex-shrink:0;background:var(--sidebar-bg);padding:24px 14px;border-right:1px solid var(--border);}
+.logo-block{text-align:center;margin-bottom:26px;}
+.logo-mark{width:48px;height:48px;margin:0 auto 6px;}
+.logo-word{font-weight:800;font-size:1.05rem;color:var(--navy);letter-spacing:-.02em;}
+.logo-tag{font-size:.5rem;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;margin-top:2px;}
 .nav{display:flex;flex-direction:column;gap:8px;}
-.navtile{padding:13px 16px;border-radius:10px;font-weight:600;font-size:.92rem;color:var(--navy);cursor:pointer;background:transparent;}
-.navtile:hover{background:#e5e7eb;}
-.navtile.active{background:var(--blue-main);color:#fff;}
+.navtile{padding:13px 14px;border-radius:10px;font-weight:600;font-size:.88rem;color:var(--navy);cursor:pointer;background:transparent;}
+.navtile:hover{background:#e0e6ec;}
+.navtile.active{background:var(--navy);color:#fff;}
 .main{flex:1;background:var(--blue-main);padding:32px;min-width:0;}
 h1{font-size:1.3rem;margin:0 0 4px;color:#fff;}
 .sub{color:#dbe4ff;font-size:.9rem;margin-bottom:16px;}
@@ -33,10 +36,22 @@ h1{font-size:1.3rem;margin:0 0 4px;color:#fff;}
 button{font:inherit;cursor:pointer;}
 .upload-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;max-width:560px;}
 .upload-card h3{margin:0 0 4px;}
-.upload-card input[type=file]{margin:10px 0;width:100%;}
 .btn{padding:12px 18px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-weight:600;font-size:.95rem;}
 .btn.pos{background:var(--green);}
 .status-msg{font-size:.85rem;color:var(--muted);margin-top:8px;}
+.top-bar{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:12px;}
+.top-bar-text{flex:1;min-width:200px;}
+.upload-row{display:flex;gap:10px;}
+.upload-tile{width:72px;height:72px;background:var(--card);border-radius:12px;border:1px solid var(--border);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;
+  box-shadow:0 2px 6px rgba(0,0,0,.1);transition:transform .1s;}
+.upload-tile:hover{transform:translateY(-2px);box-shadow:0 4px 10px rgba(0,0,0,.16);}
+.upload-tile .icon{width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:.9rem;}
+.upload-tile.invoice .icon{background:var(--accent);}
+.upload-tile.pos .icon{background:var(--green);}
+.upload-tile .tile-label{font-weight:600;font-size:.62rem;color:var(--navy);text-align:center;line-height:1.1;}
+.upload-status-row{display:flex;gap:10px;}
+.upload-status-row .status-msg{width:72px;font-size:.65rem;text-align:center;}
 table{width:100%;border-collapse:collapse;font-size:.9rem;}
 th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);}
 th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;}
@@ -60,32 +75,47 @@ th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;
 <body>
 <div class="app-shell">
   <div class="sidebar">
-    <img class="logo" src="logo.png" alt="Shrink">
+    <div class="logo-block">
+      <svg class="logo-mark" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg">
+        <path d="M150,35 C90,35 55,60 55,90 C55,120 95,118 110,122 C155,135 165,150 165,180 C165,205 120,205 65,188"
+          fill="none" stroke="#12172b" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="150" cy="35" r="19" fill="#8ecbf5"/>
+        <circle cx="65" cy="188" r="19" fill="#8ecbf5"/>
+      </svg>
+      <div class="logo-word">shrink</div>
+      <div class="logo-tag">Total inventory visibility.</div>
+    </div>
     <div class="nav">
-      <div class="navtile active" data-view="invoices">Invoices</div>
-      <div class="navtile" data-view="report">Report</div>
+      <div class="navtile active">Dashboard</div>
     </div>
   </div>
   <div class="main">
   <div id="offlineNotice" class="offline" style="display:none">Couldn't reach the database — saves won't persist.</div>
 
-  <div class="view active" id="view-invoices">
-    <h1>Invoices</h1>
-    <div class="sub">Upload a shipment invoice or a POS sales report to update your numbers.</div>
-    <div class="upload-card">
-      <h3>Co-op Invoice</h3>
-      <div class="sub">Upload a shipment invoice PDF — read automatically, review before saving.</div>
-      <input type="file" id="invoiceFile" accept="application/pdf">
-      <button class="btn" id="invoiceUploadBtn">Read Invoice</button>
-      <div class="status-msg" id="invoiceStatus"></div>
-    </div>
-
-    <div class="upload-card">
-      <h3>POS Sales Report</h3>
-      <div class="sub">Upload a daily sales report PDF — read automatically, review before saving.</div>
-      <input type="file" id="posFile" accept="application/pdf">
-      <button class="btn pos" id="posUploadBtn">Read Sales Report</button>
-      <div class="status-msg" id="posStatus"></div>
+  <div class="view active" id="view-dashboard">
+    <div class="top-bar">
+      <div class="top-bar-text">
+        <h1>Dashboard</h1>
+        <div class="sub">Upload shipment or sales report to update database.</div>
+      </div>
+      <div>
+        <div class="upload-row">
+          <div class="upload-tile invoice" id="invoiceTile">
+            <div class="icon">📄</div>
+            <div class="tile-label">Invoice</div>
+          </div>
+          <div class="upload-tile pos" id="posTile">
+            <div class="icon">🧾</div>
+            <div class="tile-label">Sales</div>
+          </div>
+        </div>
+        <input type="file" id="invoiceFile" accept="application/pdf" style="display:none">
+        <input type="file" id="posFile" accept="application/pdf" style="display:none">
+        <div class="upload-status-row">
+          <div class="status-msg" id="invoiceStatus"></div>
+          <div class="status-msg" id="posStatus"></div>
+        </div>
+      </div>
     </div>
 
     <div id="reviewCard" style="display:none;" class="upload-card" style="max-width:720px;">
@@ -93,12 +123,7 @@ th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;
       <table><thead><tr><th>Code</th><th>Name</th><th>Qty</th><th></th></tr></thead><tbody id="reviewBody"></tbody></table>
       <div class="sheet-btns"><button class="btn" id="reviewConfirm">Confirm & Save All</button></div>
     </div>
-  </div>
 
-  <div class="view" id="view-report">
-    <h1>Report</h1>
-    <div class="sub">Received vs. sold, by product.</div>
-    <div class="dash-stats" id="dashStats"></div>
     <div class="panel">
       <input id="reportSearch" class="search" placeholder="Search a product or code...">
       <table><thead><tr><th>Product</th><th>Received</th><th>Sold</th><th>Remaining</th><th>Sell-through</th></tr></thead><tbody id="reportBody"></tbody></table>
@@ -112,16 +137,6 @@ const SUPABASE_URL = 'https://ayqtssokwkbwswgngsez.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5cXRzc29rd2tid3N3Z25nc2V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1OTA5MTMsImV4cCI6MjEwNzE2NjkxM30.SEAm_MwXlLOitkeNB71uuRrYiDdV3YtcruoYX8_WeKo';
 let sb = null, events = [], products = [], reportFilter = '', pendingKind = null, reviewItems = [];
 const $=id=>document.getElementById(id);
-
-document.querySelectorAll('.navtile').forEach(tab=>{
-  tab.onclick=()=>{
-    document.querySelectorAll('.navtile').forEach(t=>t.classList.remove('active'));
-    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-    tab.classList.add('active');
-    $('view-'+tab.dataset.view).classList.add('active');
-    if(tab.dataset.view==='report') renderReport();
-  };
-});
 
 async function lookupProduct(code){
   let p = products.find(x=>x.barcode===code);
@@ -173,8 +188,10 @@ async function handleUpload(kind, fileInputId, statusId){
   }catch(e){ $(statusId).textContent = 'Something went wrong reading this file.'; }
 }
 
-$('invoiceUploadBtn').onclick = ()=> handleUpload('invoice','invoiceFile','invoiceStatus');
-$('posUploadBtn').onclick = ()=> handleUpload('pos','posFile','posStatus');
+$('invoiceTile').onclick = ()=> $('invoiceFile').click();
+$('posTile').onclick = ()=> $('posFile').click();
+$('invoiceFile').addEventListener('change', ()=> handleUpload('invoice','invoiceFile','invoiceStatus'));
+$('posFile').addEventListener('change', ()=> handleUpload('pos','posFile','posStatus'));
 
 function renderReview(){
   $('reviewBody').innerHTML = reviewItems.map((it,i)=>`
@@ -206,6 +223,7 @@ $('reviewConfirm').onclick = async ()=>{
   }
   $('reviewCard').style.display='none';
   reviewItems=[]; $('invoiceFile').value=''; $('posFile').value='';
+  renderReport();
 };
 
 function computeTotals(){
@@ -222,14 +240,6 @@ function computeTotals(){
 function renderReport(){
   const totals = computeTotals();
   const rows = Object.values(totals);
-  const sumR = rows.reduce((s,r)=>s+r.received,0);
-  const sumS = rows.reduce((s,r)=>s+r.sold,0);
-  const sumRem = sumR - sumS;
-  $('dashStats').innerHTML = `
-    <div class="dash-stat received"><div class="num">${sumR}</div><div class="label">Received</div></div>
-    <div class="dash-stat sold"><div class="num">${sumS}</div><div class="label">Sold</div></div>
-    <div class="dash-stat remaining"><div class="num ${sumRem<0?'neg':''}">${sumRem}</div><div class="label">Remaining (should be on hand)</div></div>`;
-
   const filter = reportFilter.trim().toLowerCase();
   const filtered = rows.filter(r => !filter || r.name.toLowerCase().includes(filter) || r.code.includes(filter));
   $('reportBody').innerHTML = filtered.map(r=>{
@@ -256,6 +266,7 @@ $('reportSearch').addEventListener('input', e=>{ reportFilter = e.target.value; 
     events = scansRes.data || [];
     products = productsRes.data || [];
   }catch(e){ $('offlineNotice').style.display='block'; }
+  renderReport();
 })();
 </script>
 </body>
