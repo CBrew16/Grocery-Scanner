@@ -70,6 +70,20 @@ th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;
 .bar-remain{background:var(--amber);}
 .neg{color:var(--red);font-weight:700;}
 .pos-val{color:var(--green);font-weight:700;}
+.a-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px;}
+.a-stat{background:var(--card);border-radius:12px;padding:14px 16px;}
+.a-stat .num{font-size:1.5rem;font-weight:700;color:var(--navy);}
+.a-stat .label{font-size:.72rem;color:var(--muted);margin-top:2px;}
+.pills{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.pill{padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--navy);font-size:.82rem;font-weight:600;cursor:pointer;}
+.pill.active{background:var(--navy);color:#fff;border-color:var(--navy);}
+.flag-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
+.flag-dot.low{background:var(--amber);}
+.flag-dot.slow{background:#6366f1;}
+.flag-dot.mismatch{background:var(--red);}
+.expand-row{cursor:pointer;}
+.expand-row:hover{background:rgba(0,0,0,.03);}
+.detail-row td{background:var(--bg);font-size:.8rem;padding:10px;}
 </style>
 </head>
 <body>
@@ -86,7 +100,8 @@ th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;
       <div class="logo-tag">Total inventory visibility.</div>
     </div>
     <div class="nav">
-      <div class="navtile active">Dashboard</div>
+      <div class="navtile active" data-view="dashboard">Dashboard</div>
+      <div class="navtile" data-view="analytics">Analytics</div>
     </div>
   </div>
   <div class="main">
@@ -120,6 +135,8 @@ th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;
 
     <div id="reviewCard" style="display:none;" class="upload-card" style="max-width:720px;">
       <h3 id="reviewTitle">Review</h3>
+      <div class="field" style="max-width:200px;"><label style="font-size:.75rem;color:var(--muted);">Document date</label>
+        <input type="date" id="reviewDate" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--fg);box-sizing:border-box;"></div>
       <table><thead><tr><th>Code</th><th>Name</th><th>Qty</th><th></th></tr></thead><tbody id="reviewBody"></tbody></table>
       <div class="sheet-btns"><button class="btn" id="reviewConfirm">Confirm & Save All</button></div>
     </div>
@@ -127,6 +144,21 @@ th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;
     <div class="panel">
       <input id="reportSearch" class="search" placeholder="Search a product or code...">
       <table><thead><tr><th>Product</th><th>Received</th><th>Sold</th><th>Remaining</th><th>Sell-through</th></tr></thead><tbody id="reportBody"></tbody></table>
+    </div>
+  </div>
+
+  <div class="view" id="view-analytics">
+    <h1>Analytics</h1>
+    <div class="sub">Everything up front — click a product to dig into its history.</div>
+    <div class="a-stats" id="aStats"></div>
+    <div class="pills" id="aPills">
+      <div class="pill active" data-f="all">All</div>
+      <div class="pill" data-f="low"><span class="flag-dot low"></span>Low stock</div>
+      <div class="pill" data-f="slow"><span class="flag-dot slow"></span>Slow turnover</div>
+      <div class="pill" data-f="mismatch"><span class="flag-dot mismatch"></span>Mismatches</div>
+    </div>
+    <div class="panel">
+      <table><thead><tr><th></th><th>Product</th><th>Received</th><th>Sold</th><th>Remaining</th><th>Sell-through</th></tr></thead><tbody id="aBody"></tbody></table>
     </div>
   </div>
   </div>
@@ -138,6 +170,68 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 let sb = null, events = [], products = [], reportFilter = '', pendingKind = null, reviewItems = [];
 const $=id=>document.getElementById(id);
 
+document.querySelectorAll('.navtile').forEach(tab=>{
+  tab.onclick=()=>{
+    document.querySelectorAll('.navtile').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    tab.classList.add('active');
+    $('view-'+tab.dataset.view).classList.add('active');
+    if(tab.dataset.view==='analytics') renderAnalytics();
+  };
+});
+
+let analyticsFilter = 'all', expandedBarcode = null;
+document.querySelectorAll('#aPills .pill').forEach(p=>{
+  p.onclick = ()=>{
+    document.querySelectorAll('#aPills .pill').forEach(x=>x.classList.remove('active'));
+    p.classList.add('active');
+    analyticsFilter = p.dataset.f;
+    renderAnalytics();
+  };
+});
+
+function classify(r){
+  const remaining = r.received - r.sold;
+  const sellThrough = r.received>0 ? (r.sold/r.received)*100 : null;
+  if(remaining < 0) return 'mismatch';
+  if(remaining >= 0 && remaining <= 5 && r.received>0) return 'low';
+  if(sellThrough !== null && sellThrough < 20 && r.received >= 5) return 'slow';
+  return null;
+}
+
+function renderAnalytics(){
+  const totals = computeTotals();
+  const rows = Object.values(totals);
+  const flagged = rows.map(r=>({...r, flag: classify(r)}));
+
+  const lowCount = flagged.filter(r=>r.flag==='low').length;
+  const slowCount = flagged.filter(r=>r.flag==='slow').length;
+  const mismatchCount = flagged.filter(r=>r.flag==='mismatch').length;
+  $('aStats').innerHTML = `
+    <div class="a-stat"><div class="num">${rows.length}</div><div class="label">Products tracked</div></div>
+    <div class="a-stat"><div class="num">${lowCount}</div><div class="label">Low stock</div></div>
+    <div class="a-stat"><div class="num">${slowCount}</div><div class="label">Slow turnover</div></div>
+    <div class="a-stat"><div class="num">${mismatchCount}</div><div class="label">Mismatches</div></div>`;
+
+  const visible = analyticsFilter==='all' ? flagged : flagged.filter(r=>r.flag===analyticsFilter);
+  $('aBody').innerHTML = visible.map(r=>{
+    const remaining = r.received - r.sold;
+    const soldPct = r.received>0 ? Math.min(100,(r.sold/r.received)*100) : 0;
+    const dot = r.flag ? `<span class="flag-dot ${r.flag}"></span>` : '';
+    const open = expandedBarcode === r.barcode;
+    const history = events.filter(e=>e.barcode===r.barcode).sort((a,b)=> (b.received_at||'').localeCompare(a.received_at||''));
+    const detailRow = open ? `<tr class="detail-row"><td colspan="6">${
+      history.map(h=>`${new Date(h.received_at).toLocaleDateString()} — ${h.status==='in'?'Received':'Sold'} ${h.qty}`).join('<br>') || 'No history'
+    }</td></tr>` : '';
+    return `<tr class="expand-row" onclick="toggleExpand('${r.barcode}')">
+      <td>${dot}</td><td>${r.name}</td><td>${r.received}</td><td>${r.sold}</td>
+      <td class="${remaining<0?'neg':''}">${remaining}</td><td>${soldPct.toFixed(0)}%</td>
+    </tr>${detailRow}`;
+  }).join('') || `<tr><td colspan="6" style="color:var(--muted)">No products in this view yet</td></tr>`;
+}
+function toggleExpand(barcode){ expandedBarcode = expandedBarcode===barcode ? null : barcode; renderAnalytics(); }
+window.toggleExpand = toggleExpand;
+
 async function lookupProduct(code){
   let p = products.find(x=>x.barcode===code);
   if(!p && sb){
@@ -146,8 +240,9 @@ async function lookupProduct(code){
   return p;
 }
 
-async function logEvent(code, name, qty, type){
-  const entry = { barcode: code, name, qty, status: type, received_at:new Date().toISOString() };
+async function logEvent(code, name, qty, type, dateStr){
+  const received_at = dateStr ? new Date(dateStr+'T12:00:00Z').toISOString() : new Date().toISOString();
+  const entry = { barcode: code, name, qty, status: type, received_at };
   if(sb){
     try{
       const { data, error } = await sb.from('scans').insert(entry).select().single();
@@ -181,6 +276,7 @@ async function handleUpload(kind, fileInputId, statusId){
     if(!resp.ok){ $(statusId).textContent = 'Error: ' + (result.error||'could not read document'); return; }
     reviewItems = result.items || [];
     pendingKind = kind;
+    $('reviewDate').value = result.doc_date || new Date().toISOString().slice(0,10);
     $(statusId).textContent = `Found ${reviewItems.length} line item${reviewItems.length===1?'':'s'}. Review below.`;
     $('reviewTitle').textContent = kind==='invoice' ? 'Review: Invoice' : 'Review: POS Sales';
     renderReview();
@@ -219,7 +315,7 @@ $('reviewConfirm').onclick = async ()=>{
       if(sb){ try{ await sb.from('products').insert({ barcode: code, name }); }catch(e){} }
       products.push({ barcode: code, name });
     }
-    await logEvent(code, name, qty, pendingKind==='invoice' ? 'in' : 'out');
+    await logEvent(code, name, qty, pendingKind==='invoice' ? 'in' : 'out', $('reviewDate').value);
   }
   $('reviewCard').style.display='none';
   reviewItems=[]; $('invoiceFile').value=''; $('posFile').value='';

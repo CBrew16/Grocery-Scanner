@@ -3,26 +3,30 @@
 const pdfParse = require('pdf-parse');
 
 const PROMPTS = {
-  invoice: (text) => `You are extracting line items from a wholesale grocery invoice (a shipment received from a wholesaler). Below is raw text extracted from a PDF.
+  invoice: (text) => `You are extracting data from a wholesale grocery invoice (a shipment received from a wholesaler). Below is raw text extracted from a PDF.
 
-Return ONLY a JSON array, nothing else. Each item: { "code": string, "name": string, "qty": number } where qty is the quantity shipped/received.
-Skip totals, subtotals, taxes, headers, footers. If a field is missing, use null, but always try to give a numeric qty.
+Return ONLY a JSON object, nothing else, in this exact shape:
+{ "doc_date": "YYYY-MM-DD or null if no date is found on the document", "items": [ { "code": string, "name": string, "qty": number } ] }
+"doc_date" should be the invoice's own date or shipment date as printed on the document — not today's date, not a due date. qty is the quantity shipped/received.
+Skip totals, subtotals, taxes, headers, footers from items. If a field is missing, use null, but always try to give a numeric qty.
 
 Invoice text:
 """
 ${text}
 """
-Respond with ONLY the JSON array.`,
-  pos: (text) => `You are extracting line items from a POS (point of sale) daily sales report for a grocery store. Below is raw text extracted from a PDF.
+Respond with ONLY the JSON object.`,
+  pos: (text) => `You are extracting data from a POS (point of sale) daily sales report for a grocery store. Below is raw text extracted from a PDF.
 
-Return ONLY a JSON array, nothing else. Each item: { "code": string, "name": string, "qty": number } where qty is the quantity SOLD.
-Skip totals, subtotals, taxes, payment summaries, headers, footers. If a field is missing, use null, but always try to give a numeric qty.
+Return ONLY a JSON object, nothing else, in this exact shape:
+{ "doc_date": "YYYY-MM-DD or null if no date is found on the document", "items": [ { "code": string, "name": string, "qty": number } ] }
+"doc_date" should be the date this sales report covers, as printed on the document — not today's date. qty is the quantity SOLD.
+Skip totals, subtotals, taxes, payment summaries, headers, footers from items. If a field is missing, use null, but always try to give a numeric qty.
 
 Sales report text:
 """
 ${text}
 """
-Respond with ONLY the JSON array.`
+Respond with ONLY the JSON object.`
 };
 
 module.exports = async (req, res) => {
@@ -63,16 +67,16 @@ module.exports = async (req, res) => {
 
     const aiData = await aiRes.json();
     const textBlock = aiData.content.find(b => b.type === 'text');
-    let items;
+    let parsed;
     try {
       const cleaned = textBlock.text.trim().replace(/^```json\s*|\s*```$/g, '');
-      items = JSON.parse(cleaned);
+      parsed = JSON.parse(cleaned);
     } catch (e) {
       res.status(502).json({ error: 'Could not parse AI response as JSON', raw: textBlock.text });
       return;
     }
 
-    res.status(200).json({ items });
+    res.status(200).json({ doc_date: parsed.doc_date || null, items: parsed.items || [] });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Unknown server error' });
   }
