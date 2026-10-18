@@ -137,7 +137,7 @@ th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;
       <h3 id="reviewTitle">Review</h3>
       <div class="field" style="max-width:200px;"><label style="font-size:.75rem;color:var(--muted);">Document date</label>
         <input type="date" id="reviewDate" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--fg);box-sizing:border-box;"></div>
-      <table><thead><tr><th>Code</th><th>Name</th><th>Qty</th><th></th></tr></thead><tbody id="reviewBody"></tbody></table>
+      <table><thead><tr><th>Code</th><th>Name</th><th>Qty</th><th>Unit Cost</th><th></th></tr></thead><tbody id="reviewBody"></tbody></table>
       <div class="sheet-btns"><button class="btn" id="reviewConfirm">Confirm & Save All</button></div>
     </div>
 
@@ -190,12 +190,44 @@ document.querySelectorAll('#aPills .pill').forEach(p=>{
   };
 });
 
+function weightedAvgCost(barcode){
+  const inEvents = events.filter(e=>e.barcode===barcode && e.status==='in' && e.unit_cost!=null);
+  const totalQty = inEvents.reduce((s,e)=>s+(e.qty||0),0);
+  const totalCost = inEvents.reduce((s,e)=>s+(e.qty||0)*e.unit_cost,0);
+  return totalQty>0 ? totalCost/totalQty : null;
+}
+
+function dollarSnapshot(){
+  const totals = computeTotals();
+  let inventoryValue = 0, cogs = 0, pricedProducts = 0;
+  Object.values(totals).forEach(r=>{
+    const avgCost = weightedAvgCost(r.barcode);
+    if(avgCost==null) return;
+    pricedProducts++;
+    const remaining = Math.max(0, r.received - r.sold);
+    inventoryValue += remaining * avgCost;
+    cogs += r.sold * avgCost;
+  });
+  // Approximate turnover using current inventory value as a stand-in for a true period average
+  // (true Avg Inventory = (beginning + ending)/2 over a period — needs trend history we don't have yet)
+  const turnover = inventoryValue>0 ? cogs/inventoryValue : null;
+  return { inventoryValue, cogs, turnover, pricedProducts };
+}
+
+function daysTracked(barcode){
+  const inEvents = events.filter(e=>e.barcode===barcode && e.status==='in');
+  if(!inEvents.length) return 0;
+  const earliest = inEvents.reduce((min,e)=> e.received_at < min ? e.received_at : min, inEvents[0].received_at);
+  return Math.floor((Date.now() - new Date(earliest).getTime()) / 86400000);
+}
+
 function classify(r){
   const remaining = r.received - r.sold;
   const sellThrough = r.received>0 ? (r.sold/r.received)*100 : null;
+  const days = daysTracked(r.barcode);
   if(remaining < 0) return 'mismatch';
   if(remaining >= 0 && remaining <= 5 && r.received>0) return 'low';
-  if(sellThrough !== null && sellThrough < 20 && r.received >= 5) return 'slow';
+  if(sellThrough !== null && sellThrough < 20 && r.received >= 5 && days >= 7) return 'slow';
   return null;
 }
 
@@ -207,7 +239,11 @@ function renderAnalytics(){
   const lowCount = flagged.filter(r=>r.flag==='low').length;
   const slowCount = flagged.filter(r=>r.flag==='slow').length;
   const mismatchCount = flagged.filter(r=>r.flag==='mismatch').length;
+  const d = dollarSnapshot();
   $('aStats').innerHTML = `
+    <div class="a-stat"><div class="num">$${d.inventoryValue.toFixed(0)}</div><div class="label">Inventory value on hand</div></div>
+    <div class="a-stat"><div class="num">$${d.cogs.toFixed(0)}</div><div class="label">COGS to date</div></div>
+    <div class="a-stat"><div class="num">${d.turnover!=null ? d.turnover.toFixed(2)+'x' : '—'}</div><div class="label">Turnover (approx, snapshot)</div></div>
     <div class="a-stat"><div class="num">${rows.length}</div><div class="label">Products tracked</div></div>
     <div class="a-stat"><div class="num">${lowCount}</div><div class="label">Low stock</div></div>
     <div class="a-stat"><div class="num">${slowCount}</div><div class="label">Slow turnover</div></div>
@@ -223,9 +259,11 @@ function renderAnalytics(){
     const detailRow = open ? `<tr class="detail-row"><td colspan="6">${
       history.map(h=>`${new Date(h.received_at).toLocaleDateString()} — ${h.status==='in'?'Received':'Sold'} ${h.qty}`).join('<br>') || 'No history'
     }</td></tr>` : '';
+    const days = daysTracked(r.barcode);
     return `<tr class="expand-row" onclick="toggleExpand('${r.barcode}')">
       <td>${dot}</td><td>${r.name}</td><td>${r.received}</td><td>${r.sold}</td>
-      <td class="${remaining<0?'neg':''}">${remaining}</td><td>${soldPct.toFixed(0)}%</td>
+      <td class="${remaining<0?'neg':''}">${remaining}</td>
+      <td>${soldPct.toFixed(0)}%<br><span style="color:var(--muted);font-size:.7rem;">${days}d tracked</span></td>
     </tr>${detailRow}`;
   }).join('') || `<tr><td colspan="6" style="color:var(--muted)">No products in this view yet</td></tr>`;
 }
@@ -240,9 +278,9 @@ async function lookupProduct(code){
   return p;
 }
 
-async function logEvent(code, name, qty, type, dateStr){
+async function logEvent(code, name, qty, type, dateStr, unitCost){
   const received_at = dateStr ? new Date(dateStr+'T12:00:00Z').toISOString() : new Date().toISOString();
-  const entry = { barcode: code, name, qty, status: type, received_at };
+  const entry = { barcode: code, name, qty, status: type, received_at, unit_cost: (unitCost==null?null:unitCost) };
   if(sb){
     try{
       const { data, error } = await sb.from('scans').insert(entry).select().single();
@@ -295,12 +333,15 @@ function renderReview(){
       <td><input data-i="${i}" data-f="code" value="${it.code||''}" style="width:90px;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);"></td>
       <td><input data-i="${i}" data-f="name" value="${it.name||''}" style="width:160px;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);"></td>
       <td><input data-i="${i}" data-f="qty" type="number" value="${it.qty||1}" style="width:60px;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);"></td>
+      <td><input data-i="${i}" data-f="unit_cost" type="number" step="0.01" value="${it.unit_cost!=null?it.unit_cost:''}" placeholder="$" style="width:70px;padding:4px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--fg);"></td>
       <td><button onclick="removeReviewRow(${i})" style="background:none;border:none;color:var(--muted);">&times;</button></td>
     </tr>`).join('');
   document.querySelectorAll('#reviewBody input').forEach(inp=>{
     inp.addEventListener('change', e=>{
       const i=+e.target.dataset.i, f=e.target.dataset.f;
-      reviewItems[i][f] = f==='qty' ? (parseInt(e.target.value)||1) : e.target.value;
+      if(f==='qty') reviewItems[i][f] = parseInt(e.target.value)||1;
+      else if(f==='unit_cost') reviewItems[i][f] = e.target.value==='' ? null : parseFloat(e.target.value);
+      else reviewItems[i][f] = e.target.value;
     });
   });
 }
@@ -315,7 +356,7 @@ $('reviewConfirm').onclick = async ()=>{
       if(sb){ try{ await sb.from('products').insert({ barcode: code, name }); }catch(e){} }
       products.push({ barcode: code, name });
     }
-    await logEvent(code, name, qty, pendingKind==='invoice' ? 'in' : 'out', $('reviewDate').value);
+    await logEvent(code, name, qty, pendingKind==='invoice' ? 'in' : 'out', $('reviewDate').value, it.unit_cost);
   }
   $('reviewCard').style.display='none';
   reviewItems=[]; $('invoiceFile').value=''; $('posFile').value='';
