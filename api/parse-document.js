@@ -25,6 +25,10 @@ module.exports = async (req, res) => {
     const { data, kind } = req.body;
     if (!data) { res.status(400).json({ error: 'No file data provided' }); return; }
     if (!PROMPTS[kind]) { res.status(400).json({ error: 'kind must be invoice or pos' }); return; }
+    if (!process.env.ANTHROPIC_API_KEY) {
+      res.status(500).json({ error: 'ANTHROPIC_API_KEY is not set in this deployment environment' });
+      return;
+    }
 
     const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
