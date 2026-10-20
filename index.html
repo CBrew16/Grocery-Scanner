@@ -154,11 +154,10 @@ th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;
     <div class="pills" id="aPills">
       <div class="pill active" data-f="all">All</div>
       <div class="pill" data-f="low"><span class="flag-dot low"></span>Low stock</div>
-      <div class="pill" data-f="slow"><span class="flag-dot slow"></span>Slow turnover</div>
       <div class="pill" data-f="mismatch"><span class="flag-dot mismatch"></span>Mismatches</div>
     </div>
     <div class="panel">
-      <table><thead><tr><th></th><th>Product</th><th>Received</th><th>Sold</th><th>Remaining</th><th>Sell-through</th></tr></thead><tbody id="aBody"></tbody></table>
+      <table><thead><tr><th></th><th>Product</th><th>Inventory Value</th><th>COGS</th></tr></thead><tbody id="aBody"></tbody></table>
     </div>
   </div>
   </div>
@@ -214,20 +213,10 @@ function dollarSnapshot(){
   return { inventoryValue, cogs, turnover, pricedProducts };
 }
 
-function daysTracked(barcode){
-  const inEvents = events.filter(e=>e.barcode===barcode && e.status==='in');
-  if(!inEvents.length) return 0;
-  const earliest = inEvents.reduce((min,e)=> e.received_at < min ? e.received_at : min, inEvents[0].received_at);
-  return Math.floor((Date.now() - new Date(earliest).getTime()) / 86400000);
-}
-
 function classify(r){
   const remaining = r.received - r.sold;
-  const sellThrough = r.received>0 ? (r.sold/r.received)*100 : null;
-  const days = daysTracked(r.barcode);
   if(remaining < 0) return 'mismatch';
   if(remaining >= 0 && remaining <= 5 && r.received>0) return 'low';
-  if(sellThrough !== null && sellThrough < 20 && r.received >= 5 && days >= 7) return 'slow';
   return null;
 }
 
@@ -237,35 +226,34 @@ function renderAnalytics(){
   const flagged = rows.map(r=>({...r, flag: classify(r)}));
 
   const lowCount = flagged.filter(r=>r.flag==='low').length;
-  const slowCount = flagged.filter(r=>r.flag==='slow').length;
   const mismatchCount = flagged.filter(r=>r.flag==='mismatch').length;
   const d = dollarSnapshot();
   $('aStats').innerHTML = `
-    <div class="a-stat"><div class="num">$${d.inventoryValue.toFixed(0)}</div><div class="label">Inventory value on hand</div></div>
-    <div class="a-stat"><div class="num">$${d.cogs.toFixed(0)}</div><div class="label">COGS to date</div></div>
+    <div class="a-stat"><div class="num">$${d.inventoryValue.toFixed(0)}</div><div class="label">Inventory Value</div></div>
+    <div class="a-stat"><div class="num">$${d.cogs.toFixed(0)}</div><div class="label">COGS</div></div>
     <div class="a-stat"><div class="num">${d.turnover!=null ? d.turnover.toFixed(2)+'x' : '—'}</div><div class="label">Turnover (approx, snapshot)</div></div>
     <div class="a-stat"><div class="num">${rows.length}</div><div class="label">Products tracked</div></div>
     <div class="a-stat"><div class="num">${lowCount}</div><div class="label">Low stock</div></div>
-    <div class="a-stat"><div class="num">${slowCount}</div><div class="label">Slow turnover</div></div>
     <div class="a-stat"><div class="num">${mismatchCount}</div><div class="label">Mismatches</div></div>`;
 
   const visible = analyticsFilter==='all' ? flagged : flagged.filter(r=>r.flag===analyticsFilter);
   $('aBody').innerHTML = visible.map(r=>{
-    const remaining = r.received - r.sold;
-    const soldPct = r.received>0 ? Math.min(100,(r.sold/r.received)*100) : 0;
+    const avgCost = weightedAvgCost(r.barcode);
+    const remaining = Math.max(0, r.received - r.sold);
+    const invValue = avgCost!=null ? remaining*avgCost : null;
+    const cogsValue = avgCost!=null ? r.sold*avgCost : null;
     const dot = r.flag ? `<span class="flag-dot ${r.flag}"></span>` : '';
     const open = expandedBarcode === r.barcode;
     const history = events.filter(e=>e.barcode===r.barcode).sort((a,b)=> (b.received_at||'').localeCompare(a.received_at||''));
-    const detailRow = open ? `<tr class="detail-row"><td colspan="6">${
-      history.map(h=>`${new Date(h.received_at).toLocaleDateString()} — ${h.status==='in'?'Received':'Sold'} ${h.qty}`).join('<br>') || 'No history'
+    const detailRow = open ? `<tr class="detail-row"><td colspan="4">${
+      history.map(h=>`${new Date(h.received_at).toLocaleDateString()} — ${h.status==='in'?'Received':'Sold'} ${h.qty}${h.unit_cost!=null?' @ $'+h.unit_cost.toFixed(2):''}`).join('<br>') || 'No history'
     }</td></tr>` : '';
-    const days = daysTracked(r.barcode);
     return `<tr class="expand-row" onclick="toggleExpand('${r.barcode}')">
-      <td>${dot}</td><td>${r.name}</td><td>${r.received}</td><td>${r.sold}</td>
-      <td class="${remaining<0?'neg':''}">${remaining}</td>
-      <td>${soldPct.toFixed(0)}%<br><span style="color:var(--muted);font-size:.7rem;">${days}d tracked</span></td>
+      <td>${dot}</td><td>${r.name}</td>
+      <td>${invValue!=null ? '$'+invValue.toFixed(2) : '—'}</td>
+      <td>${cogsValue!=null ? '$'+cogsValue.toFixed(2) : '—'}</td>
     </tr>${detailRow}`;
-  }).join('') || `<tr><td colspan="6" style="color:var(--muted)">No products in this view yet</td></tr>`;
+  }).join('') || `<tr><td colspan="4" style="color:var(--muted)">No products in this view yet</td></tr>`;
 }
 function toggleExpand(barcode){ expandedBarcode = expandedBarcode===barcode ? null : barcode; renderAnalytics(); }
 window.toggleExpand = toggleExpand;
