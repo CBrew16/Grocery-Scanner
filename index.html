@@ -200,7 +200,7 @@ function dollarSnapshot(){
   const totals = computeTotals();
   let inventoryValue = 0, cogs = 0, pricedProducts = 0;
   Object.values(totals).forEach(r=>{
-    const avgCost = weightedAvgCost(r.barcode);
+    const avgCost = weightedAvgCost(r.code);
     if(avgCost==null) return;
     pricedProducts++;
     const remaining = Math.max(0, r.received - r.sold);
@@ -238,17 +238,17 @@ function renderAnalytics(){
 
   const visible = analyticsFilter==='all' ? flagged : flagged.filter(r=>r.flag===analyticsFilter);
   $('aBody').innerHTML = visible.map(r=>{
-    const avgCost = weightedAvgCost(r.barcode);
+    const avgCost = weightedAvgCost(r.code);
     const remaining = Math.max(0, r.received - r.sold);
     const invValue = avgCost!=null ? remaining*avgCost : null;
     const cogsValue = avgCost!=null ? r.sold*avgCost : null;
     const dot = r.flag ? `<span class="flag-dot ${r.flag}"></span>` : '';
-    const open = expandedBarcode === r.barcode;
-    const history = events.filter(e=>e.barcode===r.barcode).sort((a,b)=> (b.received_at||'').localeCompare(a.received_at||''));
+    const open = expandedBarcode === r.code;
+    const history = events.filter(e=>e.barcode===r.code).sort((a,b)=> (b.received_at||'').localeCompare(a.received_at||''));
     const detailRow = open ? `<tr class="detail-row"><td colspan="4">${
       history.map(h=>`${new Date(h.received_at).toLocaleDateString()} — ${h.status==='in'?'Received':'Sold'} ${h.qty}${h.unit_cost!=null?' @ $'+h.unit_cost.toFixed(2):''}`).join('<br>') || 'No history'
     }</td></tr>` : '';
-    return `<tr class="expand-row" onclick="toggleExpand('${r.barcode}')">
+    return `<tr class="expand-row" onclick="toggleExpand('${r.code}')">
       <td>${dot}</td><td>${r.name}</td>
       <td>${invValue!=null ? '$'+invValue.toFixed(2) : '—'}</td>
       <td>${cogsValue!=null ? '$'+cogsValue.toFixed(2) : '—'}</td>
