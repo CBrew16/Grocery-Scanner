@@ -1,6 +1,6 @@
 // Vercel serverless function: POST { kind: 'invoice'|'pos', filename, data (base64 PDF) }
 // Returns: { items: [{ code, name, qty }] }
-const pdfParse = require('pdf-parse');
+const pdfParse = require('pdf-parse/lib/pdf-parse.js');
 
 const PROMPTS = {
   invoice: (text) => `You are extracting data from a wholesale grocery invoice (a shipment received from a wholesaler). Below is raw text extracted from a PDF.
