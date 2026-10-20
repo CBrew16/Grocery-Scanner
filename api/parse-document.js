@@ -67,16 +67,16 @@ module.exports = async (req, res) => {
 
     const aiData = await aiRes.json();
     const textBlock = aiData.content.find(b => b.type === 'text');
-    let parsed;
+    let extracted;
     try {
       const cleaned = textBlock.text.trim().replace(/^```json\s*|\s*```$/g, '');
-      parsed = JSON.parse(cleaned);
+      extracted = JSON.parse(cleaned);
     } catch (e) {
       res.status(502).json({ error: 'Could not parse AI response as JSON', raw: textBlock.text });
       return;
     }
 
-    res.status(200).json({ doc_date: parsed.doc_date || null, items: parsed.items || [] });
+    res.status(200).json({ doc_date: extracted.doc_date || null, items: extracted.items || [] });
   } catch (err) {
     res.status(500).json({ error: err.message || 'Unknown server error' });
   }
