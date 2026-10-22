@@ -138,6 +138,7 @@ th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;
       <div class="field" style="max-width:200px;"><label style="font-size:.75rem;color:var(--muted);">Document date</label>
         <input type="date" id="reviewDate" style="width:100%;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--fg);box-sizing:border-box;"></div>
       <table><thead><tr><th>Code</th><th>Name</th><th>Qty</th><th>Unit Cost</th><th></th></tr></thead><tbody id="reviewBody"></tbody></table>
+      <div id="totalsCheck" style="margin-top:14px;padding:12px 14px;border-radius:10px;font-size:.88rem;"></div>
       <div class="sheet-btns"><button class="btn" id="reviewConfirm">Confirm & Save All</button></div>
     </div>
 
@@ -166,7 +167,7 @@ th{color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;
 <script>
 const SUPABASE_URL = 'https://ayqtssokwkbwswgngsez.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF5cXRzc29rd2tid3N3Z25nc2V6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE1OTA5MTMsImV4cCI6MjEwNzE2NjkxM30.SEAm_MwXlLOitkeNB71uuRrYiDdV3YtcruoYX8_WeKo';
-let sb = null, events = [], products = [], reportFilter = '', pendingKind = null, reviewItems = [];
+let sb = null, events = [], products = [], reportFilter = '', pendingKind = null, reviewItems = [], pendingDocTotal = null;
 const $=id=>document.getElementById(id);
 
 document.querySelectorAll('.navtile').forEach(tab=>{
@@ -302,6 +303,7 @@ async function handleUpload(kind, fileInputId, statusId){
     if(!resp.ok){ $(statusId).textContent = 'Error: ' + (result.error||'could not read document'); return; }
     reviewItems = result.items || [];
     pendingKind = kind;
+    pendingDocTotal = result.doc_total!=null ? result.doc_total : null;
     $('reviewDate').value = result.doc_date || new Date().toISOString().slice(0,10);
     $(statusId).textContent = `Found ${reviewItems.length} line item${reviewItems.length===1?'':'s'}. Review below.`;
     $('reviewTitle').textContent = kind==='invoice' ? 'Review: Invoice' : 'Review: POS Sales';
@@ -330,8 +332,26 @@ function renderReview(){
       if(f==='qty') reviewItems[i][f] = parseInt(e.target.value)||1;
       else if(f==='unit_cost') reviewItems[i][f] = e.target.value==='' ? null : parseFloat(e.target.value);
       else reviewItems[i][f] = e.target.value;
+      renderTotalsCheck();
     });
   });
+  renderTotalsCheck();
+}
+
+function renderTotalsCheck(){
+  const calcTotal = reviewItems.reduce((s,it)=> s + (it.qty||0)*(it.unit_cost||0), 0);
+  const box = $('totalsCheck');
+  if(pendingDocTotal==null){
+    box.style.background = 'var(--bg)';
+    box.innerHTML = `<b>Calculated total: $${calcTotal.toFixed(2)}</b><br><span style="color:var(--muted);font-size:.8rem;">No total was found on the document to compare against — double-check this against the paper invoice.</span>`;
+    return;
+  }
+  const diff = Math.abs(calcTotal - pendingDocTotal);
+  const matches = diff < 0.05; // allow for rounding
+  box.style.background = matches ? 'var(--greenbg)' : 'var(--redbg)';
+  box.innerHTML = matches
+    ? `<b>✓ Matches invoice total</b><br>Calculated: $${calcTotal.toFixed(2)} — Invoice states: $${pendingDocTotal.toFixed(2)}`
+    : `<b>⚠ Doesn't match invoice total</b><br>Calculated: $${calcTotal.toFixed(2)} — Invoice states: $${pendingDocTotal.toFixed(2)} (off by $${diff.toFixed(2)})<br><span style="font-size:.8rem;">Check for a missing/incorrect line item, or tax/shipping not reflected in your line costs.</span>`;
 }
 function removeReviewRow(i){ reviewItems.splice(i,1); renderReview(); }
 window.removeReviewRow = removeReviewRow;
